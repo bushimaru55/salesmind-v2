@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SalesMind - AI営業思考トレーナー</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- ヘッダー -->
+        <header class="header">
+            <h1>🧠 SalesMind</h1>
+            <p class="subtitle">AI営業思考トレーナー - SPINメソッドで商談スキルを向上</p>
+            <div class="auth-section">
+                <div id="authTabs" class="auth-tabs">
+                    <button class="tab-button active" onclick="showLoginTab()">ログイン</button>
+                    <button class="tab-button" onclick="showRegisterTab()">新規登録</button>
+                </div>
+                <div id="loginForm" class="auth-form">
+                    <h3>ログイン</h3>
+                    <input type="text" id="loginUsername" placeholder="ユーザー名">
+                    <input type="password" id="loginPassword" placeholder="パスワード">
+                    <button onclick="login()">ログイン</button>
+                    <div id="loginError" class="error-message" style="display: none;"></div>
+                </div>
+                <div id="registerForm" class="auth-form" style="display: none;">
+                    <h3>新規登録</h3>
+                    <input type="text" id="registerUsername" placeholder="ユーザー名（3文字以上）">
+                    <input type="email" id="registerEmail" placeholder="メールアドレス（オプション）">
+                    <input type="password" id="registerPassword" placeholder="パスワード（6文字以上）">
+                    <button onclick="register()">登録</button>
+                    <div id="registerError" class="error-message" style="display: none;"></div>
+                </div>
+                <div id="userInfo" class="user-info" style="display: none;">
+                    <span>ようこそ、<strong id="usernameDisplay"></strong>さん</span>
+                    <button onclick="logout()">ログアウト</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- メインコンテンツ -->
+        <main class="main-content">
+            <!-- ステップ1: SPIN質問生成 -->
+            <section id="step1" class="step-section active">
+                <h2>ステップ1: SPIN質問生成</h2>
+                <div class="form-group">
+                    <label>業界 *</label>
+                    <input type="text" id="industry" placeholder="例: IT" value="IT">
+                </div>
+                <div class="form-group">
+                    <label>価値提案 *</label>
+                    <input type="text" id="value_proposition" placeholder="例: クラウド導入支援サービス" value="クラウド導入支援サービス">
+                </div>
+                <div class="form-group">
+                    <label>顧客像（オプション）</label>
+                    <input type="text" id="customer_persona" placeholder="例: 中堅IT企業のCTO" value="中堅IT企業のCTO">
+                </div>
+                <div class="form-group">
+                    <label>顧客の課題（オプション）</label>
+                    <input type="text" id="customer_pain" placeholder="例: 既存システムの保守コスト削減" value="既存システムの保守コスト削減">
+                </div>
+                <button onclick="generateSpinQuestions()" class="btn-primary">SPIN質問を生成</button>
+                <div id="spinQuestionsResult" class="result-box" style="display: none;">
+                    <h3>生成されたSPIN質問</h3>
+                    <div id="spinQuestionsContent"></div>
+                    <button onclick="proceedToSessionStart()" class="btn-primary">セッションを開始</button>
+                </div>
+            </section>
+
+            <!-- ステップ2: セッション開始 -->
+            <section id="step2" class="step-section" style="display: none;">
+                <h2>ステップ2: セッション開始</h2>
+                <div class="info-box">
+                    <p>セッション情報を確認して、商談を開始してください。</p>
+                </div>
+                <div class="form-group">
+                    <label>業界 *</label>
+                    <input type="text" id="session_industry" readonly>
+                </div>
+                <div class="form-group">
+                    <label>価値提案 *</label>
+                    <input type="text" id="session_value_proposition" readonly>
+                </div>
+                <div class="form-group">
+                    <label>顧客像</label>
+                    <input type="text" id="session_customer_persona" readonly>
+                </div>
+                <div class="form-group">
+                    <label>顧客の課題</label>
+                    <input type="text" id="session_customer_pain" readonly>
+                </div>
+                <button onclick="startSession()" class="btn-primary">セッションを開始</button>
+                <div id="sessionStartResult" class="result-box" style="display: none;">
+                    <p class="success-message">セッションが開始されました！</p>
+                    <p><strong>セッションID:</strong> <span id="sessionIdDisplay"></span></p>
+                    <button onclick="proceedToChat()" class="btn-primary">チャットを開始</button>
+                </div>
+            </section>
+
+            <!-- ステップ3: チャット（AI顧客との対話） -->
+            <section id="step3" class="step-section" style="display: none;">
+                <h2>ステップ3: AI顧客との対話</h2>
+                <div class="chat-container">
+                    <div id="chatMessages" class="chat-messages">
+                        <!-- メッセージがここに表示される -->
+                    </div>
+                    <div class="chat-input-area">
+                        <input type="text" id="chatMessageInput" placeholder="営業担当者の質問を入力..." onkeypress="handleChatKeyPress(event)">
+                        <button onclick="sendChatMessage()" class="btn-primary">送信</button>
+                    </div>
+                    <div class="chat-actions">
+                        <button onclick="finishSession()" class="btn-secondary">セッションを終了してスコアリング</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ステップ4: スコアリング結果 -->
+            <section id="step4" class="step-section" style="display: none;">
+                <h2>ステップ4: スコアリング結果</h2>
+                <div id="scoringResult" class="scoring-result">
+                    <!-- スコアリング結果がここに表示される -->
+                </div>
+                <div class="action-buttons">
+                    <button onclick="viewReport()" class="btn-primary">レポート詳細を見る</button>
+                    <button onclick="startNewSession()" class="btn-secondary">新しいセッションを開始</button>
+                </div>
+            </section>
+
+            <!-- ステップ5: レポート詳細 -->
+            <section id="step5" class="step-section" style="display: none;">
+                <h2>レポート詳細</h2>
+                <div id="reportDetails" class="report-details">
+                    <!-- レポート詳細がここに表示される -->
+                </div>
+                <div class="action-buttons">
+                    <button onclick="viewSessionList()" class="btn-primary">セッション一覧を見る</button>
+                    <button onclick="startNewSession()" class="btn-secondary">新しいセッションを開始</button>
+                </div>
+            </section>
+
+            <!-- セッション一覧 -->
+            <section id="sessionList" class="step-section" style="display: none;">
+                <h2>セッション一覧</h2>
+                <button onclick="refreshSessionList()" class="btn-secondary">更新</button>
+                <div id="sessionListContent" class="session-list">
+                    <!-- セッション一覧がここに表示される -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ログビューアー -->
+    <div id="logViewer" class="log-viewer" style="display: none;">
+        <div class="log-viewer-header">
+            <h2>📋 ログビューアー</h2>
+            <div class="log-viewer-actions">
+                <button onclick="window.logViewer.exportLogs()" class="btn-secondary">エクスポート</button>
+                <button onclick="window.logViewer.clearLogs()" class="btn-secondary">クリア</button>
+                <button onclick="window.logViewer.close()" class="btn-secondary">閉じる</button>
+            </div>
+        </div>
+        <div class="log-viewer-filters">
+            <label>
+                <input type="checkbox" id="filterInfo" checked onchange="window.logViewer.updateLogs()"> Info
+            </label>
+            <label>
+                <input type="checkbox" id="filterWarning" checked onchange="window.logViewer.updateLogs()"> Warning
+            </label>
+            <label>
+                <input type="checkbox" id="filterError" checked onchange="window.logViewer.updateLogs()"> Error
+            </label>
+            <label>
+                <input type="checkbox" id="filterDebug" checked onchange="window.logViewer.updateLogs()"> Debug
+            </label>
+        </div>
+        <div id="logViewerContent" class="log-viewer-content"></div>
+    </div>
+
+    <!-- ログビューアー開閉ボタン -->
+    <button id="logViewerToggle" class="log-viewer-toggle" onclick="window.logViewer.toggle()" title="ログビューアー">
+        📋
+    </button>
+
+    <script src="logger.js"></script>
+    <script src="log-viewer.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+

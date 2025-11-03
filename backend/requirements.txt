@@ -1,0 +1,7 @@
+Django>=5.0
+djangorestframework
+openai
+python-dotenv
+psycopg2-binary
+django-cors-headers
+
