@@ -46,65 +46,40 @@
 - **処理フロー追加**:
     1. 既存どおりメッセージを保存。
     2. 詳細診断モードかつ `session.company` が存在する場合のみ分析を実行。
-    3. OpenAI による簡易分析 API を呼び出し、以下の情報を取得。
-        - `success_delta`: -10〜+10 などの整数
-        - `reason`: 変動理由テキスト
-        - 参考: `analysis_notes`（ログ用途）
-    4. `Session.success_probability` に `success_delta` を適用。
-        - 上限・下限（0〜100）でクリップ。
-    5. 応答 JSON に以下を追加。
-        ```json
-        {
-          "success_probability": 54,
-          "success_delta": 4,
-          "analysis_reason": "課題の背景を具体的に確認できたため"
-        }
-        ```
-- **レスポンス**: 既存の `messages` 配列に加えて上記項目を返却。
+    3. OpenAI による会話分析サービス（`conversation_analysis.analyze_sales_message`）を呼び出し、以下の情報を取得。
+        - `current_spin_stage`: 会話全体から見た現在のSPIN段階（S/P/I/N）
+        - `message_spin_type`: 今回の営業発言が属するSPIN段階（S/P/I/N）
+        - `step_appropriateness`: 段階の適切性（`ideal` / `appropriate` / `jump` / `regression`）
+        - `success_delta`: -5〜+5 の成功率変動値
+        - `reason`: 変動理由テキスト（SPIN観点を含む）
+        - `notes`: 補足情報（任意）
+    4. `success_delta` を `Session.success_probability` に適用し、0〜100 でクリップ。
+    5. `ChatMessage.analysis_summary` に SPIN評価の要約（変動理由／段階／適切性）を保存。
+    6. 応答 JSON に成功率と SPIN 評価情報をセットしフロントへ返却。
 
 ### 4.2 OpenAI プロンプト（分析用）
 
 - 軽量かつ応答速度重視のため `gpt-4o-mini` 継続利用予定。
-- プロンプト内容（案）
-    - 入力
-        - 最新の会話（直近5往復程度）
-        - 今回の営業発言
-        - 企業情報サマリー
-        - 現在の成功率
-    - 出力
-        ```json
-        {
-          "success_delta": 4,
-          "reason": "顧客の現状を具体的に確認でき、先方の課題意識を高めたため",
-          "notes": "質問が課題の深堀りに繋がった"
-        }
-        ```
-- エッジケース
-    - 質問が短すぎる／雑談の場合は `success_delta = 0`。
-    - 不適切な質問や話題逸脱時は大きくマイナス。
+- プロンプト内容（2025-11 現在）
+    - 会話履歴・企業情報・現在の成功率を提示。
+    - SPIN 各段階の定義、理想的な進行（S→P→I→N）、段階飛び越し／逆戻り時の減点ルールを明示。
+    - JSON 出力に SPIN 判定結果（current_spin_stage / message_spin_type / step_appropriateness）と成功率変動を含めるよう指示。
+    - 成功率変動の計算ルール（+5〜-5）をプロンプト内に明文化。
 
-## 5. フロントエンド仕様
-
-1. 成功率パネルの追加
-    - DOM 要素 ID: `successMeter`
-    - レイアウト: チャット画面のヘッダ内（企業概要の下）
-    - デザイン: 数字と矢印/アイコン、理由テキスト
-2. API 応答の `success_probability` などを受け取り、即時反映
-3. 変動履歴をロガーに出力
-4. 初期値 50% を詳細診断モード開始時にセット
+---
 
 ## 6. 分析ロジック詳細
 
-### 6.1 成功率変動ルール（案）
+### 6.1 成功率変動ルール（2025-11 更新）
 
 - `success_delta` の範囲: -5 〜 +5
 - 評価観点
-    1. 顧客状況の把握度
-    2. 課題深掘りの深さ
-    3. 提案価値との関連性
-    4. 顧客視点・共感の具合
-- これら項目を 0〜2 点で評価し、合計点を `success_delta` に変換
-- OpenAI 応答を妥当性チェック（値域・型）したうえで利用
+    1. SPIN進行段階が適切か（S→P→I→N の順序、逆戻りや飛び越しの有無）
+    2. 現在段階に応じた質問の質（Situation/Problem/Implication/Need-Payoff）
+    3. 企業情報や価値提案との関連性
+    4. 顧客視点・共感の度合い
+- OpenAI 応答には SPIN判定3要素（current_spin_stage, message_spin_type, step_appropriateness）と理由が必須。
+- Django 側では値域チェック後、`ChatMessage.analysis_summary` に SPIN 情報を追記。
 
 ### 6.2 キャッシュ / コスト対策
 

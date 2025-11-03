@@ -1135,14 +1135,21 @@ async function sendChatMessage() {
             
             // 詳細診断モードの場合、成功率情報を更新
             if (currentMode === 'detailed' && data.success_probability !== undefined) {
-                updateSuccessProbability(data.success_probability, data.success_delta, data.analysis_reason);
+                updateSuccessProbability(data.success_probability, data.success_delta, data.analysis_reason, {
+                    currentStage: data.current_spin_stage,
+                    messageSpinType: data.message_spin_type,
+                    stepAppropriateness: data.step_appropriateness
+                });
                 
                 // ログに記録
                 if (window.logger) {
                     window.logger.info('成功率更新', {
                         success_probability: data.success_probability,
                         success_delta: data.success_delta,
-                        analysis_reason: data.analysis_reason
+                        analysis_reason: data.analysis_reason,
+                        current_spin_stage: data.current_spin_stage,
+                        message_spin_type: data.message_spin_type,
+                        step_appropriateness: data.step_appropriateness
                     });
                 }
             }
@@ -1321,15 +1328,32 @@ function hideSuccessMeter() {
     if (successMeter) {
         successMeter.style.display = 'none';
     }
+    const spinMeta = document.getElementById('successSpinMeta');
+    if (spinMeta) {
+        spinMeta.style.display = 'none';
+    }
+    const reasonDisplay = document.getElementById('successReasonDisplay');
+    if (reasonDisplay) {
+        reasonDisplay.style.display = 'none';
+    }
+    const deltaDisplay = document.getElementById('successDeltaDisplay');
+    if (deltaDisplay) {
+        deltaDisplay.style.display = 'none';
+    }
 }
 
 // 成功率を更新
-function updateSuccessProbability(probability, delta, reason) {
+function updateSuccessProbability(probability, delta, reason, metadata = {}) {
     const probabilityValue = document.getElementById('successProbabilityValue');
     const deltaDisplay = document.getElementById('successDeltaDisplay');
     const deltaValue = document.getElementById('successDeltaValue');
     const reasonDisplay = document.getElementById('successReasonDisplay');
     const reasonText = document.getElementById('successReasonText');
+    const spinMeta = document.getElementById('successSpinMeta');
+    const stageEl = document.getElementById('successSpinStage');
+    const messageEl = document.getElementById('successSpinMessage');
+    const stepEl = document.getElementById('successSpinAppropriateness');
+    const { currentStage, messageSpinType, stepAppropriateness } = metadata;
     
     if (probabilityValue) {
         // アニメーションを追加
@@ -1360,6 +1384,60 @@ function updateSuccessProbability(probability, delta, reason) {
         reasonText.textContent = reason;
     } else if (reasonDisplay && !reason) {
         reasonDisplay.style.display = 'none';
+        if (reasonText) {
+            reasonText.textContent = '';
+        }
+    }
+    
+    const stageLabelMap = {
+        S: 'S（状況確認）',
+        P: 'P（課題顕在化）',
+        I: 'I（示唆）',
+        N: 'N（解決メリット）',
+        unknown: '判定不能'
+    };
+    const stepLabelMap = {
+        ideal: '理想的な進行',
+        appropriate: '適切',
+        jump: '段階を飛ばした',
+        regression: '逆戻り',
+        unknown: '判定不能'
+    };
+    
+    if (spinMeta) {
+        const hasMeta = Boolean(currentStage || messageSpinType || stepAppropriateness);
+        if (hasMeta) {
+            spinMeta.style.display = 'block';
+            if (stageEl) {
+                const stageLabel = currentStage ? (stageLabelMap[currentStage] || currentStage) : '未判定';
+                stageEl.textContent = `現在の段階: ${stageLabel}`;
+                stageEl.style.display = 'block';
+            }
+            if (messageEl) {
+                const messageLabel = messageSpinType ? (stageLabelMap[messageSpinType] || messageSpinType) : '';
+                messageEl.textContent = messageLabel ? `今回の発言: ${messageLabel}` : '';
+                messageEl.style.display = messageLabel ? 'block' : 'none';
+            }
+            if (stepEl) {
+                const stepLabel = stepAppropriateness ? (stepLabelMap[stepAppropriateness] || stepAppropriateness) : '';
+                stepEl.textContent = stepLabel ? `ステップ適切性: ${stepLabel}` : '';
+                stepEl.style.display = stepLabel ? 'block' : 'none';
+            }
+        } else {
+            spinMeta.style.display = 'none';
+            if (stageEl) {
+                stageEl.textContent = '';
+                stageEl.style.display = 'none';
+            }
+            if (messageEl) {
+                messageEl.textContent = '';
+                messageEl.style.display = 'none';
+            }
+            if (stepEl) {
+                stepEl.textContent = '';
+                stepEl.style.display = 'none';
+            }
+        }
     }
 }
 

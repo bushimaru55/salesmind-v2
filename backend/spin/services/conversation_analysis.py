@@ -25,6 +25,14 @@ def analyze_sales_message(session, conversation_history, latest_message: str) ->
     """営業メッセージを分析し、成功率変動を算出"""
     logger.info(f"会話分析開始: Session {session.id}, 現在の成功率={session.success_probability}%")
     
+    logger.info(
+        "会話分析入力: session=%s, current_probability=%s, history_count=%s, latest_message_length=%s",
+        session.id,
+        session.success_probability,
+        len(conversation_history),
+        len(latest_message),
+    )
+
     formatted_history = _format_conversation(
         [{"role": msg.role, "message": msg.message} for msg in conversation_history]
     )
@@ -74,32 +82,55 @@ def analyze_sales_message(session, conversation_history, latest_message: str) ->
 {latest_message}
 ---
 
-評価方針:
-- 詳細診断モードであり、顧客企業の実際の情報に基づく深掘りが求められている
-- 営業担当者の質問・提案が適切に顧客の課題を引き出そうとしているか
-- 説明が一方的でないか、顧客視点で共感や問題意識を確認できているか
-- 顧客企業にとっての価値や次のステップに繋がる質問になっているか
-- 企業情報を活用した具体的な質問ができているか
+【評価方針 - SPIN法に基づく評価】
 
-以下の観点で評価してください：
-1. 顧客状況の把握度（企業情報に基づいた適切な質問か）
-2. 課題深掘りの深さ（表面的な質問でないか）
-3. 提案価値との関連性（価値提案に関連した質問か）
-4. 顧客視点・共感の具合（顧客の立場を理解した質問か）
+1. 現在の会話段階の判定
+   - S（Situation）: 顧客の現状・背景を確認する段階
+   - P（Problem）: 顧客の課題を顕在化させる段階
+   - I（Implication）: 課題が放置された場合の影響を示唆する段階
+   - N（Need-Payoff）: 解決後の価値やメリットを想像させる段階
+   - 判定が難しい場合は "unknown" と記載
 
-出力フォーマットは必ず次のJSON形式：
+2. 今回の営業担当者の発言がどのステップに該当するか判定（S/P/I/N いずれか。判定不能は "unknown"）
+
+3. ステップ適切性の評価
+   - ideal: S→P→I→N と理想的に進行し、現在の段階に適合している
+   - appropriate: 現段階に適切だが理想的な進行とは言えない
+   - jump: 必要な前段階を飛ばしている
+   - regression: 後段階から前段階に逆戻りしている
+   - 判断不能の場合は "unknown"
+
+4. 各ステップの質を評価
+   - S: 企業情報を活用した具体的な状況確認になっているか
+   - P: 顧客の課題を自然に引き出せているか
+   - I: 課題放置のリスクや影響を顧客に認識させられているか
+   - N: 解決後の価値を顧客自身にイメージさせられているか
+
+5. 成功率変動の算出ルール
+   - 理想的な進行で質の高い質問: +4〜+5
+   - 適切なステップで良い質問: +2〜+3
+   - 通常レベルの質問: 0〜+1（本当に中立的な場合のみ）
+   - 段階の飛び越し・逆戻り: -2〜-1
+   - 不適切・話題逸脱: -5〜-3
+   - **注意**: 常に0を返すのではなく、上記基準に従いプラス／マイナスを積極的に判断してください。
+
+成功率変動を決定する際は、以下の視点を必ず考慮してください：
+- 現在の会話段階と今回の発言段階の整合性
+- 顧客の反応を引き出す深さや具体性
+- 価値提案や企業情報との関連度
+- 顧客視点・共感が表れているか
+
+出力フォーマットは必ず次のJSON形式（各キーは必須）で出力してください：
 {{
+  "current_spin_stage": "S" または "P" または "I" または "N" または "unknown",
+  "message_spin_type": "S" または "P" または "I" または "N" または "unknown",
+  "step_appropriateness": "ideal" または "appropriate" または "jump" または "regression" または "unknown",
   "success_delta": 整数 (-5〜5),
-  "reason": "今回の変動理由（1〜2文）",
-  "notes": "補足があれば（任意）"
+  "reason": "今回の変動理由（SPINの観点を含む1〜2文）",
+  "notes": "補足があれば（任意、無い場合は空文字）"
 }}
 
 success_deltaは-5〜5の整数で、プラスは成功率を上げる要素、マイナスは下げる要素を意味します。
-- 非常に良い質問・提案: +4〜+5
-- 良い質問・提案: +2〜+3
-- 普通: 0〜+1
-- 浅い質問・一方的: -2〜-1
-- 不適切な質問・話題逸脱: -5〜-3
 """
 
     try:
@@ -116,20 +147,49 @@ success_deltaは-5〜5の整数で、プラスは成功率を上げる要素、�
             temperature=0.4,
         )
         payload = response.choices[0].message.content
+        logger.info("会話分析レスポンス: %s", payload)
         result = json.loads(payload)
 
         success_delta = int(result.get("success_delta", 0))
         # クランプ処理
         success_delta = max(-5, min(5, success_delta))
 
+        current_stage = result.get("current_spin_stage")
+        message_stage = result.get("message_spin_type")
+        step_appropriateness = result.get("step_appropriateness")
+
+        valid_spin_values = {"S", "P", "I", "N"}
+        valid_step_values = {"ideal", "appropriate", "jump", "regression"}
+
+        normalized_stage = current_stage if current_stage in valid_spin_values else "unknown"
+        normalized_message_stage = message_stage if message_stage in valid_spin_values else "unknown"
+        normalized_step = step_appropriateness if step_appropriateness in valid_step_values else "unknown"
+
+        logger.info(
+            "会話分析結果: delta=%s, stage_raw=%s, stage=%s, message_raw=%s, message=%s, step_raw=%s, step=%s",
+            success_delta,
+            current_stage,
+            normalized_stage,
+            message_stage,
+            normalized_message_stage,
+            step_appropriateness,
+            normalized_step,
+        )
+
         return {
+            "current_spin_stage": normalized_stage,
+            "message_spin_type": normalized_message_stage,
+            "step_appropriateness": normalized_step,
             "success_delta": success_delta,
             "reason": result.get("reason", ""),
-            "notes": result.get("notes")
+            "notes": result.get("notes"),
         }
     except Exception as exc:
         logger.warning("会話分析に失敗しました: %s", exc, exc_info=True)
         return {
+            "current_spin_stage": "unknown",
+            "message_spin_type": "unknown",
+            "step_appropriateness": "unknown",
             "success_delta": 0,
             "reason": "分析を実行できなかったため成功率は変化しませんでした。",
             "notes": None,

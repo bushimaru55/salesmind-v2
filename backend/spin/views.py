@@ -261,6 +261,9 @@ def chat_session(request):
         success_probability = session.success_probability
         success_delta = 0
         analysis_reason = None
+        current_spin_stage = None
+        message_spin_type = None
+        step_appropriateness = None
         
         if session.mode == 'detailed' and session.company:
             try:
@@ -268,6 +271,9 @@ def chat_session(request):
                 analysis_result = analyze_sales_message(session, conversation_history, message)
                 success_delta = analysis_result.get('success_delta', 0)
                 analysis_reason = analysis_result.get('reason', '')
+                current_spin_stage = analysis_result.get('current_spin_stage')
+                message_spin_type = analysis_result.get('message_spin_type')
+                step_appropriateness = analysis_result.get('step_appropriateness')
                 
                 # 成功率を更新（0-100の範囲でクリップ）
                 new_probability = session.success_probability + success_delta
@@ -280,10 +286,27 @@ def chat_session(request):
                 
                 # 営業メッセージに分析結果を保存
                 salesperson_msg.success_delta = success_delta
-                salesperson_msg.analysis_summary = analysis_reason
+                summary_lines = []
+                if analysis_reason:
+                    summary_lines.append(analysis_reason)
+                if step_appropriateness:
+                    summary_lines.append(f"ステップ適切性: {step_appropriateness}")
+                if current_spin_stage:
+                    summary_lines.append(f"現在の段階: {current_spin_stage}")
+                if message_spin_type:
+                    summary_lines.append(f"今回の発言: {message_spin_type}")
+                salesperson_msg.analysis_summary = "\n".join(summary_lines) if summary_lines else None
                 salesperson_msg.save()
                 
-                logger.info(f"成功率更新: Session {session.id}, Delta={success_delta}, New={success_probability}%")
+                logger.info(
+                    "成功率更新: Session %s, Delta=%s, New=%s%%, stage=%s, message=%s, step=%s",
+                    session.id,
+                    success_delta,
+                    success_probability,
+                    current_spin_stage,
+                    message_spin_type,
+                    step_appropriateness,
+                )
             except Exception as e:
                 logger.warning(f"成功率分析に失敗しました: {e}", exc_info=True)
                 # 分析に失敗した場合は成功率は変更しない
@@ -310,6 +333,9 @@ def chat_session(request):
         if session.mode == 'detailed':
             response_data["success_probability"] = success_probability
             response_data["success_delta"] = success_delta
+            response_data["current_spin_stage"] = current_spin_stage
+            response_data["message_spin_type"] = message_spin_type
+            response_data["step_appropriateness"] = step_appropriateness
             if analysis_reason:
                 response_data["analysis_reason"] = analysis_reason
         
