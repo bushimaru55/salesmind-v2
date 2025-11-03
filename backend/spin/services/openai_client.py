@@ -8,11 +8,11 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def generate_customer_response(session, conversation_history):
     """顧客ロールプレイ用の応答を生成"""
-    logger.info(f"AI顧客応答生成を開始: Session {session.id}")
+    logger.info(f"AI顧客応答生成を開始: Session {session.id}, mode={session.mode}")
     
     # 企業情報を取得（詳細診断モードの場合）
     company_info_text = ""
-    if session.company:
+    if session.mode == 'detailed' and session.company:
         company = session.company
         company_lines = []
         company_lines.append(f"企業名: {company.company_name}")
@@ -53,18 +53,23 @@ def generate_customer_response(session, conversation_history):
 
 重要な注意事項：
 - あなたは一般的な企業の担当者や社長としてふるまってください
-- SPIN法や営業手法については一切知りません。営業からの質問に対して、普通のビジネスパーソンとして自然に回答するだけです
-- 営業からの質問に対して、企業の状況や課題を自然に話してください"""
+- 回答は必ず一人称（「私は」「当社では」など）で行い、営業担当者の質問に自然に答えてください
+- あなたはSPIN法やSituation/Problem/Implication/Needといったフレームワークを認識しておらず、そのような用語を決して口にしません
+- 営業担当者の質問に対して、企業の状況や課題、検討事項を自然な会話として返答してください
+- 営業担当者から質問されていない事項については、不自然に話題を切り出さず、会話の流れに沿って答えてください"""
     
     # 企業情報がある場合は追加の指示を追加
     if company_info_text:
-        system_prompt += "\n- 上記の企業情報（会社名、事業内容、所在地など）を参考にして、具体的な応答をしてください"
+        system_prompt += "\n- 上記の企業情報（会社名、事業内容、所在地など）を参考にして、具体的で現実味のある応答をしてください"
+    else:
+        system_prompt += "\n- 企業情報が限られている場合でも、業界や営業担当者から提供された情報をもとに現実的な内容で回答してください"
     
     system_prompt += """
 - 質問に対しては事実を答えますが、すべてを一度に明かす必要はありません（抵抗を示したり、慎重になる場合もあります）
 - 営業が質問してくることに対して、逆に質問したり、SPIN法のような構造化された質問をすることはありません
 - 単純に、営業からの質問に対する回答や、状況の説明を行うだけです
 - 企業の実務者として、課題や悩みを自然に共有しますが、それは営業手法を意識したものではありません
+- 回答はすべて自然な日本語で、2〜4文程度のまとまりで返答してください
 """
     
     # 会話履歴をメッセージ形式に変換
@@ -83,7 +88,7 @@ def generate_customer_response(session, conversation_history):
             temperature=0.8,
         )
         response_content = res.choices[0].message.content
-        logger.info(f"AI顧客応答生成が完了: Session {session.id}, 応答長: {len(response_content)}文字")
+        logger.info(f"AI顧客応答生成が完了: Session {session.id}, mode={session.mode}, 応答長: {len(response_content)}文字")
         return response_content
     except Exception as e:
         logger.error(f"AI顧客応答生成エラー: Session {session.id}, Error: {str(e)}", exc_info=True)

@@ -60,10 +60,11 @@ class SessionSerializer(serializers.ModelSerializer):
     company_id = serializers.UUIDField(write_only=True, required=False, allow_null=True, help_text="企業情報のID（詳細診断モード用）")
     company = CompanySerializer(read_only=True)
     industry = serializers.CharField(max_length=100, required=False, allow_blank=True, help_text="業界（企業情報がある場合はオプショナル）")
+    mode = serializers.ChoiceField(choices=Session.MODE_CHOICES, required=False, help_text="診断モード（指定しない場合は自動判定）")
     
     class Meta:
         model = Session
-        fields = ['id', 'user', 'industry', 'value_proposition', 'customer_persona', 
+        fields = ['id', 'user', 'mode', 'industry', 'value_proposition', 'customer_persona', 
                   'customer_pain', 'status', 'started_at', 'finished_at', 'created_at',
                   'company_id', 'company', 'company_analysis']
         read_only_fields = ['id', 'user', 'status', 'started_at', 'finished_at', 'created_at', 'company', 'company_analysis']
@@ -74,13 +75,32 @@ class SessionSerializer(serializers.ModelSerializer):
         return value.strip() if value else ''
     
     def validate(self, attrs):
-        """全体バリデーション（company_idがある場合は業界をオプショナルにする）"""
+        """全体バリデーション（modeの自動判定と整合性チェック）"""
         company_id = attrs.get('company_id')
+        mode = attrs.get('mode')
         industry = attrs.get('industry', '')
         
-        # company_idがない場合、業界は必須
-        if not company_id and (not industry or not industry.strip()):
-            raise serializers.ValidationError({"industry": "業界は必須です（企業情報がない場合）"})
+        # modeが指定されていない場合、company_idの有無で自動判定
+        if not mode:
+            if company_id:
+                attrs['mode'] = 'detailed'
+            else:
+                attrs['mode'] = 'simple'
+        else:
+            attrs['mode'] = mode
+        
+        # 簡易診断モードの場合、業界は必須
+        if attrs.get('mode') == 'simple' and (not industry or not industry.strip()):
+            if not company_id:
+                raise serializers.ValidationError({"industry": "業界は必須です（簡易診断モード）"})
+        
+        # 詳細診断モードの場合、company_idは必須
+        if attrs.get('mode') == 'detailed' and not company_id:
+            raise serializers.ValidationError({"company_id": "企業情報は必須です（詳細診断モード）"})
+        
+        # 整合性チェック：簡易診断モードなのにcompany_idが指定されている
+        if attrs.get('mode') == 'simple' and company_id:
+            raise serializers.ValidationError({"mode": "簡易診断モードでは企業情報は指定できません"})
         
         return attrs
     
@@ -94,6 +114,7 @@ class SessionSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         company_id = validated_data.pop('company_id', None)
+        mode = validated_data.get('mode', 'simple')  # validateで設定済み
         validated_data['id'] = uuid.uuid4()
         validated_data['status'] = 'active'
         
@@ -116,6 +137,9 @@ class SessionSerializer(serializers.ModelSerializer):
                     pass
             except Company.DoesNotExist:
                 raise serializers.ValidationError({"company_id": "指定された企業情報が見つかりません"})
+        
+        # modeを設定（validateで設定済みだが念のため）
+        validated_data['mode'] = mode
         
         return super().create(validated_data)
 

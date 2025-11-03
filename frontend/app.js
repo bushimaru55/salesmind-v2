@@ -264,8 +264,12 @@ function logout() {
 
 // 診断開始（簡易診断モード用：セッション開始＋チャット画面へ直接遷移）
 async function startDiagnosis() {
+    // トークンを最新の状態で取得
+    authToken = localStorage.getItem('authToken');
+    
     if (!authToken) {
         alert('ログインしてください');
+        showStep(0); // ログイン画面に戻る
         return;
     }
     
@@ -296,12 +300,29 @@ async function startDiagnosis() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
+                mode: 'simple',  // 明示的にmodeを指定
                 industry,
                 value_proposition,
                 customer_persona: customer_persona || undefined,
                 customer_pain: null // 顧客の課題は聞き出すべきなので、入力しない
             })
         });
+        
+        // 401エラーの場合は、JSON解析前にチェック
+        if (response.status === 401) {
+            // 認証エラー - トークンをクリアしてログイン画面に戻る
+            authToken = null;
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('username');
+            
+            if (window.logger) {
+                window.logger.warning('認証エラー（401）: トークンが無効です。ログイン画面に戻ります。');
+            }
+            
+            alert('ログインセッションが期限切れです。再度ログインしてください。');
+            logout(); // ログアウト処理で画面をリセット
+            return;
+        }
         
         const data = await response.json();
         
@@ -317,7 +338,25 @@ async function startDiagnosis() {
             showStep(3);
             loadChatHistory();
         } else {
-            showError('diagnosisStartResult', 'セッション開始に失敗しました: ' + (data.message || data.error || '不明なエラー'));
+            // バリデーションエラーなどの場合
+            let errorMsg = 'セッション開始に失敗しました';
+            if (data.industry) {
+                errorMsg += ': ' + (Array.isArray(data.industry) ? data.industry[0] : data.industry);
+            } else if (data.value_proposition) {
+                errorMsg += ': ' + (Array.isArray(data.value_proposition) ? data.value_proposition[0] : data.value_proposition);
+            } else if (data.mode) {
+                errorMsg += ': ' + (Array.isArray(data.mode) ? data.mode[0] : data.mode);
+            } else if (data.message) {
+                errorMsg += ': ' + data.message;
+            } else if (data.error) {
+                errorMsg += ': ' + data.error;
+            }
+            
+            if (window.logger) {
+                window.logger.error('セッション開始エラー', { status: response.status, data });
+            }
+            
+            showError('diagnosisStartResult', errorMsg);
         }
     } catch (error) {
         let errorMsg = 'エラーが発生しました: ' + error.message;
@@ -325,7 +364,7 @@ async function startDiagnosis() {
             errorMsg = 'サーバーに接続できませんでした。\nバックエンドサーバー（http://localhost:8000）が起動しているか確認してください。';
         }
         if (window.logger) {
-            window.logger.error('診断開始エラー', { message: error.message, stack: error.stack, errorType: error.name });
+            window.logger.error('診断開始エラー', { mode: currentMode, message: error.message, stack: error.stack, errorType: error.name });
         }
         showError('diagnosisStartResult', errorMsg);
     }
@@ -488,8 +527,12 @@ function displayCompanyInfo(companyData) {
 
 // 詳細診断開始（企業情報をセッションに紐付けてチャット開始）
 async function startDetailedDiagnosis() {
+    // トークンを最新の状態で取得
+    authToken = localStorage.getItem('authToken');
+    
     if (!authToken) {
         alert('ログインしてください');
+        showStep(0); // ログイン画面に戻る
         return;
     }
     
@@ -535,6 +578,7 @@ async function startDetailedDiagnosis() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
+                mode: 'detailed',  // 明示的にmodeを指定
                 // company_idがある場合は業界は不要（企業情報から取得される）
                 // industry: '', // company_idがある場合は送らない
                 value_proposition: value_proposition,
@@ -543,6 +587,22 @@ async function startDetailedDiagnosis() {
                 company_id: currentCompanyId // 企業情報のID
             })
         });
+        
+        // 401エラーの場合は、JSON解析前にチェック
+        if (response.status === 401) {
+            // 認証エラー - トークンをクリアしてログイン画面に戻る
+            authToken = null;
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('username');
+            
+            if (window.logger) {
+                window.logger.warning('認証エラー（401）: トークンが無効です。ログイン画面に戻ります。');
+            }
+            
+            alert('ログインセッションが期限切れです。再度ログインしてください。');
+            logout(); // ログアウト処理で画面をリセット
+            return;
+        }
         
         const data = await response.json();
         
@@ -584,7 +644,7 @@ async function startDetailedDiagnosis() {
             errorMsg = 'サーバーに接続できませんでした。\nバックエンドサーバー（http://localhost:8000）が起動しているか確認してください。';
         }
         if (window.logger) {
-            window.logger.error('詳細診断開始エラー', { message: error.message, stack: error.stack, errorType: error.name });
+            window.logger.error('詳細診断開始エラー', { mode: currentMode, message: error.message, stack: error.stack, errorType: error.name });
         }
         showError('companyInfoResult', errorMsg);
     }

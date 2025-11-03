@@ -63,8 +63,14 @@ class Session(models.Model):
         ('finished', '完了'),
     ]
     
+    MODE_CHOICES = [
+        ('simple', '簡易診断'),
+        ('detailed', '詳細診断'),
+    ]
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions')
+    mode = models.CharField(max_length=20, choices=MODE_CHOICES, default='simple', help_text="診断モード（簡易診断または詳細診断）")
     industry = models.CharField(max_length=100)
     value_proposition = models.TextField()
     customer_persona = models.TextField(null=True, blank=True)

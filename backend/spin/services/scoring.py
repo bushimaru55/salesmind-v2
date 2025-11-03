@@ -11,7 +11,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def score_conversation(session, conversation_history):
     """会話履歴を分析してスコアリングを実行"""
-    logger.info(f"スコアリング開始: Session {session.id}, メッセージ数: {len(conversation_history)}")
+    logger.info(f"スコアリング開始: Session {session.id}, mode={session.mode}, メッセージ数: {len(conversation_history)}")
     # 会話履歴をテキスト形式に変換
     conversation_text = ""
     for msg in conversation_history:
@@ -20,7 +20,7 @@ def score_conversation(session, conversation_history):
     
     # 企業情報を取得（詳細診断モードの場合）
     company_info_text = ""
-    if session.company:
+    if session.mode == 'detailed' and session.company:
         company = session.company
         company_lines = []
         company_lines.append(f"企業名: {company.company_name}")
@@ -140,7 +140,7 @@ def score_conversation(session, conversation_history):
             temperature=0.7,
         )
         response_content = res.choices[0].message.content
-        logger.info(f"スコアリング完了: Session {session.id}")
+        logger.info(f"スコアリング完了: Session {session.id}, mode={session.mode}")
         return response_content
     except Exception as e:
         logger.error(f"スコアリングエラー: Session {session.id}, Error: {str(e)}", exc_info=True)
