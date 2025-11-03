@@ -4,6 +4,85 @@
     box-sizing: border-box;
 }
 
+/* モード選択スタイル */
+.mode-selection-container {
+    display: flex;
+    gap: 30px;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 40px 20px;
+}
+
+.mode-card {
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 30px;
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.mode-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+    border-color: #667eea;
+}
+
+.mode-card h3 {
+    color: #333;
+    font-size: 1.5em;
+    margin: 15px 0 10px 0;
+}
+
+.mode-icon {
+    font-size: 3em;
+    margin-bottom: 10px;
+}
+
+.mode-description {
+    color: #666;
+    font-size: 1em;
+    margin-bottom: 20px;
+    line-height: 1.6;
+}
+
+.mode-features {
+    list-style: none;
+    text-align: left;
+    margin: 20px 0;
+    padding: 0;
+}
+
+.mode-features li {
+    color: #555;
+    font-size: 0.95em;
+    margin: 10px 0;
+    padding-left: 10px;
+}
+
+.mode-select-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 6px;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-top: 20px;
+    width: 100%;
+}
+
+.mode-select-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -132,12 +211,48 @@ body {
     display: block;
 }
 
+.step-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
 .step-section h2 {
     color: #667eea;
-    margin-bottom: 30px;
     font-size: 2em;
     border-bottom: 3px solid #667eea;
     padding-bottom: 10px;
+    margin: 0;
+    flex: 1;
+    min-width: 200px;
+}
+
+/* モード選択に戻るボタン */
+.btn-back-to-mode {
+    background: #f5f5f5;
+    color: #666;
+    border: 1px solid #ddd;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 0.95em;
+    font-weight: normal;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+}
+
+.btn-back-to-mode:hover {
+    background: #e8e8e8;
+    border-color: #999;
+    color: #333;
+    transform: translateX(-2px);
+}
+
+.btn-back-to-mode:active {
+    transform: translateX(-1px);
 }
 
 .form-group {

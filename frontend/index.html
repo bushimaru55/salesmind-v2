@@ -41,66 +41,73 @@
 
         <!-- メインコンテンツ -->
         <main class="main-content">
-            <!-- ステップ1: SPIN質問生成 -->
-            <section id="step1" class="step-section active">
-                <h2>ステップ1: SPIN質問生成</h2>
-                <div class="form-group">
-                    <label>業界 *</label>
-                    <input type="text" id="industry" placeholder="例: IT" value="IT">
-                </div>
-                <div class="form-group">
-                    <label>価値提案 *</label>
-                    <input type="text" id="value_proposition" placeholder="例: クラウド導入支援サービス" value="クラウド導入支援サービス">
-                </div>
-                <div class="form-group">
-                    <label>顧客像（オプション）</label>
-                    <input type="text" id="customer_persona" placeholder="例: 中堅IT企業のCTO" value="中堅IT企業のCTO">
-                </div>
-                <div class="form-group">
-                    <label>顧客の課題（オプション）</label>
-                    <input type="text" id="customer_pain" placeholder="例: 既存システムの保守コスト削減" value="既存システムの保守コスト削減">
-                </div>
-                <button onclick="generateSpinQuestions()" class="btn-primary">SPIN質問を生成</button>
-                <div id="spinQuestionsResult" class="result-box" style="display: none;">
-                    <h3>生成されたSPIN質問</h3>
-                    <div id="spinQuestionsContent"></div>
-                    <button onclick="proceedToSessionStart()" class="btn-primary">セッションを開始</button>
+            <!-- ステップ0: モード選択 -->
+            <section id="step0" class="step-section active">
+                <h2>診断モードを選択してください</h2>
+                <div class="mode-selection-container">
+                    <div class="mode-card" onclick="selectMode('simple')">
+                        <div class="mode-icon">⚡</div>
+                        <h3>簡易診断モード</h3>
+                        <p class="mode-description">手軽にSPIN質問を生成してトレーニングを開始できます</p>
+                        <ul class="mode-features">
+                            <li>✓ 手動入力で簡単に開始</li>
+                            <li>✓ 企業情報不要</li>
+                            <li>✓ すぐにトレーニング開始</li>
+                        </ul>
+                        <button class="mode-select-btn">このモードを選択</button>
+                    </div>
+                    <div class="mode-card" onclick="selectMode('detailed')">
+                        <div class="mode-icon">🔍</div>
+                        <h3>詳細診断モード</h3>
+                        <p class="mode-description">企業情報を取得して、より実践的なトレーニングが可能です</p>
+                        <ul class="mode-features">
+                            <li>✓ 企業情報を自動取得</li>
+                            <li>✓ SPIN適合性分析</li>
+                            <li>✓ 具体的な質問生成</li>
+                        </ul>
+                        <button class="mode-select-btn">このモードを選択</button>
+                    </div>
                 </div>
             </section>
 
-            <!-- ステップ2: セッション開始 -->
-            <section id="step2" class="step-section" style="display: none;">
-                <h2>ステップ2: セッション開始</h2>
+            <!-- ステップ1: 提案予定の企業情報（簡易診断モード用） -->
+            <section id="step1" class="step-section" style="display: none;">
+                <div class="step-header">
+                    <h2>提案予定の企業情報</h2>
+                    <button onclick="returnToModeSelection()" class="btn-back-to-mode">← モード選択に戻る</button>
+                </div>
                 <div class="info-box">
-                    <p>セッション情報を確認して、商談を開始してください。</p>
+                    <p>提案予定の企業情報を入力してください。</p>
                 </div>
                 <div class="form-group">
                     <label>業界 *</label>
-                    <input type="text" id="session_industry" readonly>
+                    <input type="text" id="industry" placeholder="例: IT" value="IT" required>
                 </div>
                 <div class="form-group">
                     <label>価値提案 *</label>
-                    <input type="text" id="session_value_proposition" readonly>
+                    <input type="text" id="value_proposition" placeholder="例: クラウド導入支援サービス" value="クラウド導入支援サービス" required>
                 </div>
                 <div class="form-group">
-                    <label>顧客像</label>
-                    <input type="text" id="session_customer_persona" readonly>
+                    <label>顧客像（オプション）</label>
+                    <input type="text" id="customer_persona" placeholder="例: 中堅IT企業のCTO" value="">
                 </div>
-                <div class="form-group">
-                    <label>顧客の課題</label>
-                    <input type="text" id="session_customer_pain" readonly>
+                <button onclick="startDiagnosis()" class="btn-primary">診断開始</button>
+                <div id="diagnosisStartResult" class="result-box" style="display: none;">
+                    <!-- ローディングやエラーメッセージがここに表示される -->
                 </div>
-                <button onclick="startSession()" class="btn-primary">セッションを開始</button>
-                <div id="sessionStartResult" class="result-box" style="display: none;">
-                    <p class="success-message">セッションが開始されました！</p>
-                    <p><strong>セッションID:</strong> <span id="sessionIdDisplay"></span></p>
-                    <button onclick="proceedToChat()" class="btn-primary">チャットを開始</button>
-                </div>
+            </section>
+
+            <!-- ステップ2: セッション開始（非表示 - 直接チャットに遷移するため） -->
+            <section id="step2" class="step-section" style="display: none;">
+                <!-- このセクションは使用されませんが、互換性のために残しています -->
             </section>
 
             <!-- ステップ3: チャット（AI顧客との対話） -->
             <section id="step3" class="step-section" style="display: none;">
-                <h2>ステップ3: AI顧客との対話</h2>
+                <div class="step-header">
+                    <h2>ステップ3: AI顧客との対話</h2>
+                    <button onclick="returnToModeSelection()" class="btn-back-to-mode">← モード選択に戻る</button>
+                </div>
                 <div class="chat-container">
                     <div id="chatMessages" class="chat-messages">
                         <!-- メッセージがここに表示される -->
@@ -117,7 +124,10 @@
 
             <!-- ステップ4: スコアリング結果 -->
             <section id="step4" class="step-section" style="display: none;">
-                <h2>ステップ4: スコアリング結果</h2>
+                <div class="step-header">
+                    <h2>ステップ4: スコアリング結果</h2>
+                    <button onclick="returnToModeSelection()" class="btn-back-to-mode">← モード選択に戻る</button>
+                </div>
                 <div id="scoringResult" class="scoring-result">
                     <!-- スコアリング結果がここに表示される -->
                 </div>
@@ -129,7 +139,10 @@
 
             <!-- ステップ5: レポート詳細 -->
             <section id="step5" class="step-section" style="display: none;">
-                <h2>レポート詳細</h2>
+                <div class="step-header">
+                    <h2>レポート詳細</h2>
+                    <button onclick="returnToModeSelection()" class="btn-back-to-mode">← モード選択に戻る</button>
+                </div>
                 <div id="reportDetails" class="report-details">
                     <!-- レポート詳細がここに表示される -->
                 </div>
@@ -141,7 +154,10 @@
 
             <!-- セッション一覧 -->
             <section id="sessionList" class="step-section" style="display: none;">
-                <h2>セッション一覧</h2>
+                <div class="step-header">
+                    <h2>セッション一覧</h2>
+                    <button onclick="returnToModeSelection()" class="btn-back-to-mode">← モード選択に戻る</button>
+                </div>
                 <button onclick="refreshSessionList()" class="btn-secondary">更新</button>
                 <div id="sessionListContent" class="session-list">
                     <!-- セッション一覧がここに表示される -->

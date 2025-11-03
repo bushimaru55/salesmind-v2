@@ -10,15 +10,23 @@ from rest_framework.authtoken.models import Token
 import json
 import uuid
 import logging
-from .models import Session, ChatMessage, Report
+from .models import Session, ChatMessage, Report, Company, CompanyAnalysis
 from .serializers import (
     SessionSerializer,
     ChatMessageSerializer,
     ReportSerializer,
     SpinGenerateSerializer,
+    CompanySerializer,
+    CompanyScrapeSerializer,
+    CompanySitemapSerializer,
+    CompanyAnalysisSerializer,
+    CompanyAnalyzeSerializer,
 )
 from .services.openai_client import generate_spin as generate_spin_questions, generate_customer_response
 from .services.scoring import score_conversation
+from .services.scraper import scrape_company_info, scrape_multiple_urls
+from .services.sitemap_parser import parse_sitemap_from_file, parse_sitemap_from_url, parse_sitemap_index
+from .services.company_analyzer import analyze_spin_suitability
 from .exceptions import OpenAIAPIError, SessionNotFoundError, SessionFinishedError, NoConversationHistoryError
 
 logger = logging.getLogger(__name__)
@@ -408,3 +416,232 @@ def get_report(request, id):
     if report.session.user != request.user:
         return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
     return Response(ReportSerializer(report).data, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def scrape_company(request):
+    """企業URLから情報をスクレイピングするエンドポイント（単一URL）"""
+    serializer = CompanyScrapeSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        url = serializer.validated_data['url']
+        value_proposition = serializer.validated_data.get('value_proposition')
+        
+        logger.info(f"企業スクレイピングを開始: URL={url}, User={request.user.username}")
+        
+        # スクレイピング実行
+        company_info = scrape_company_info(url)
+        
+        # Companyモデルに保存
+        company = Company.objects.create(
+            user=request.user,
+            source_url=url,
+            scrape_source='url',
+            company_name=company_info.get('company_name', 'Unknown'),
+            industry=company_info.get('industry'),
+            business_description=company_info.get('business_description'),
+            location=company_info.get('location'),
+            employee_count=company_info.get('employee_count'),
+            established_year=company_info.get('established_year'),
+            scraped_data=company_info
+        )
+        
+        logger.info(f"企業情報を保存しました: Company ID={company.id}")
+        
+        # 価値提案がある場合、分析も実行
+        analysis_result = None
+        if value_proposition:
+            try:
+                analysis_result = analyze_spin_suitability(company_info, value_proposition)
+                company_analysis = CompanyAnalysis.objects.create(
+                    company=company,
+                    user=request.user,
+                    value_proposition=value_proposition,
+                    spin_suitability=analysis_result.get('spin_suitability', {}),
+                    recommendations=analysis_result.get('recommendations', {})
+                )
+                logger.info(f"企業分析を保存しました: Analysis ID={company_analysis.id}")
+            except Exception as e:
+                logger.warning(f"企業分析の実行に失敗しました: {e}", exc_info=True)
+        
+        response_data = CompanySerializer(company).data
+        if analysis_result:
+            response_data['analysis'] = analysis_result
+        
+        return Response(response_data, status=status.HTTP_201_CREATED)
+    
+    except ValueError as e:
+        logger.error(f"スクレイピングエラー: {e}", exc_info=True)
+        return Response({
+            "error": "Scraping failed",
+            "message": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        logger.error(f"予期しないエラー: {e}", exc_info=True)
+        return Response({
+            "error": "Internal server error",
+            "message": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def scrape_from_sitemap(request):
+    """sitemap.xmlからURL一覧を取得し、各URLから企業情報をスクレイピングするエンドポイント"""
+    # ファイルアップロードかURL指定かを判定
+    sitemap_file = request.FILES.get('sitemap_file')
+    sitemap_url = request.data.get('sitemap_url')
+    value_proposition = request.data.get('value_proposition')
+    
+    if not sitemap_file and not sitemap_url:
+        return Response({
+            "error": "Validation failed",
+            "message": "sitemap_file または sitemap_url のいずれかが必要です"
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        logger.info(f"sitemap.xmlからの企業スクレイピングを開始: User={request.user.username}")
+        
+        # sitemap.xmlからURL一覧を取得
+        if sitemap_file:
+            # ファイルアップロードの場合
+            file_content = sitemap_file.read()
+            urls = parse_sitemap_from_file(file_content)
+            source_url = sitemap_file.name
+        else:
+            # URL指定の場合
+            urls = parse_sitemap_index(sitemap_url)  # sitemap indexにも対応
+            source_url = sitemap_url
+        
+        logger.info(f"sitemap.xmlから {len(urls)} 件のURLを取得しました")
+        
+        if not urls:
+            return Response({
+                "error": "No URLs found",
+                "message": "sitemap.xmlからURLが見つかりませんでした"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 複数URLからスクレイピング（最大50件まで）
+        company_info = scrape_multiple_urls(urls, max_urls=50)
+        
+        # Companyモデルに保存
+        company = Company.objects.create(
+            user=request.user,
+            source_url=source_url,
+            scrape_source='sitemap',
+            company_name=company_info.get('company_name', 'Unknown'),
+            industry=company_info.get('industry'),
+            business_description=company_info.get('business_description'),
+            location=company_info.get('location'),
+            employee_count=company_info.get('employee_count'),
+            established_year=company_info.get('established_year'),
+            scraped_urls=company_info.get('scraped_urls', []),
+            scraped_data=company_info
+        )
+        
+        logger.info(f"企業情報を保存しました: Company ID={company.id}")
+        
+        # 価値提案がある場合、分析も実行
+        analysis_result = None
+        if value_proposition:
+            try:
+                analysis_result = analyze_spin_suitability(company_info, value_proposition)
+                company_analysis = CompanyAnalysis.objects.create(
+                    company=company,
+                    user=request.user,
+                    value_proposition=value_proposition,
+                    spin_suitability=analysis_result.get('spin_suitability', {}),
+                    recommendations=analysis_result.get('recommendations', {})
+                )
+                logger.info(f"企業分析を保存しました: Analysis ID={company_analysis.id}")
+            except Exception as e:
+                logger.warning(f"企業分析の実行に失敗しました: {e}", exc_info=True)
+        
+        response_data = CompanySerializer(company).data
+        response_data['urls_found'] = company_info.get('urls_found', 0)
+        response_data['urls_scraped'] = company_info.get('urls_scraped', 0)
+        response_data['urls_failed'] = company_info.get('urls_failed', 0)
+        if analysis_result:
+            response_data['analysis'] = analysis_result
+        
+        return Response(response_data, status=status.HTTP_201_CREATED)
+    
+    except ValueError as e:
+        logger.error(f"sitemap解析エラー: {e}", exc_info=True)
+        return Response({
+            "error": "Sitemap parsing failed",
+            "message": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        logger.error(f"予期しないエラー: {e}", exc_info=True)
+        return Response({
+            "error": "Internal server error",
+            "message": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def analyze_company(request):
+    """スクレイピングした企業情報を元に、SPIN提案適合性をチェックするエンドポイント"""
+    serializer = CompanyAnalyzeSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        company_id = serializer.validated_data['company_id']
+        value_proposition = serializer.validated_data['value_proposition']
+        
+        # 企業情報を取得
+        company = get_object_or_404(Company, id=company_id, user=request.user)
+        
+        logger.info(f"企業分析を開始: Company ID={company.id}, User={request.user.username}")
+        
+        # 企業情報を辞書形式に変換
+        company_info = {
+            'company_name': company.company_name,
+            'industry': company.industry,
+            'business_description': company.business_description,
+            'location': company.location,
+            'employee_count': company.employee_count,
+            'established_year': company.established_year,
+            'raw_html_list': company.scraped_data.get('raw_html_list', []) if company.scraped_data else []
+        }
+        
+        # SPIN適合性分析を実行
+        analysis_result = analyze_spin_suitability(company_info, value_proposition)
+        
+        # CompanyAnalysisモデルに保存（既存の場合は更新）
+        company_analysis, created = CompanyAnalysis.objects.update_or_create(
+            company=company,
+            user=request.user,
+            defaults={
+                'value_proposition': value_proposition,
+                'spin_suitability': analysis_result.get('spin_suitability', {}),
+                'recommendations': analysis_result.get('recommendations', {}),
+                'analysis_details': analysis_result
+            }
+        )
+        
+        logger.info(f"企業分析を保存しました: Analysis ID={company_analysis.id}")
+        
+        response_data = CompanyAnalysisSerializer(company_analysis).data
+        response_data['analysis'] = analysis_result
+        
+        return Response(response_data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+    
+    except ValueError as e:
+        logger.error(f"企業分析エラー: {e}", exc_info=True)
+        return Response({
+            "error": "Analysis failed",
+            "message": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        logger.error(f"予期しないエラー: {e}", exc_info=True)
+        return Response({
+            "error": "Internal server error",
+            "message": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

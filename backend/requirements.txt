@@ -4,4 +4,7 @@ openai
 python-dotenv
 psycopg2-binary
 django-cors-headers
+beautifulsoup4>=4.12.0
+requests>=2.31.0
+lxml>=4.9.0
 

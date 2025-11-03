@@ -3,6 +3,7 @@ const API_BASE_URL = 'http://localhost:8000/api';
 let authToken = localStorage.getItem('authToken');
 let currentSessionId = null;
 let currentReportId = null;
+let currentMode = localStorage.getItem('currentMode') || null; // 'simple' or 'detailed'
 
 // ページロード時の処理
 window.onload = function() {
@@ -11,7 +12,80 @@ window.onload = function() {
         window.logger.info('SalesMindアプリケーションが起動しました');
     }
     checkAuth();
+    initMode();
 };
+
+// モード初期化
+function initMode() {
+    // 既にモードが選択されている場合は、そのモードの最初のステップを表示
+    if (currentMode) {
+        if (currentMode === 'simple') {
+            showStep(1); // 簡易診断モードのステップ1
+        } else if (currentMode === 'detailed') {
+            showStep(1); // 詳細診断モードのステップ1（後で実装）
+            // 詳細診断モードのステップ1は企業情報取得になるので、後で実装
+        }
+    } else {
+        // モード未選択の場合は、モード選択画面を表示
+        showStep(0);
+    }
+}
+
+// モード選択
+function selectMode(mode) {
+    if (window.logger) {
+        window.logger.info('モードを選択', { mode });
+    }
+    
+    currentMode = mode;
+    localStorage.setItem('currentMode', mode);
+    
+    if (mode === 'simple') {
+        // 簡易診断モードの最初のステップへ
+        showStep(1);
+    } else if (mode === 'detailed') {
+        // 詳細診断モードの最初のステップへ（後で実装）
+        showStep(1); // 暫定的にステップ1を表示（後で詳細診断モード専用ステップに変更）
+        alert('詳細診断モードは現在開発中です。簡易診断モードをご利用ください。');
+        // TODO: 詳細診断モードのステップ1（企業情報取得）を実装
+    }
+}
+
+// モード選択画面に戻る
+function returnToModeSelection() {
+    if (window.logger) {
+        window.logger.info('モード選択画面に戻る');
+    }
+    
+    // セッションが進行中の場合は確認を求める
+    if (currentSessionId) {
+        const confirmed = confirm(
+            'セッションが進行中です。モード選択に戻ると、現在のセッションが中断されます。\n\n' +
+            '本当にモード選択に戻りますか？'
+        );
+        
+        if (!confirmed) {
+            return;
+        }
+    }
+    
+    // モードとセッション情報をリセット
+    currentMode = null;
+    currentSessionId = null;
+    currentReportId = null;
+    
+    localStorage.removeItem('currentMode');
+    
+    // モード選択画面に戻る
+    showStep(0);
+    
+    // 状態をリセット
+    resetToStep1();
+    
+    if (window.logger) {
+        window.logger.info('モード選択画面に戻りました');
+    }
+}
 
 // 認証状態の確認
 function checkAuth() {
@@ -106,7 +180,16 @@ async function register() {
             showError('registerError', errorMsg);
         }
     } catch (error) {
-        showError('registerError', 'エラーが発生しました: ' + error.message);
+        let errorMsg = 'エラーが発生しました: ' + error.message;
+        if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+            errorMsg = 'サーバーに接続できませんでした。\nバックエンドサーバー（http://localhost:8000）が起動しているか確認してください。';
+        } else if (error.message.includes('ERR_EMPTY_RESPONSE')) {
+            errorMsg = 'サーバーから応答がありませんでした。\nバックエンドサーバーのターミナルでエラーメッセージを確認してください。';
+        }
+        if (window.logger) {
+            window.logger.error('ユーザー登録エラー', { message: error.message, stack: error.stack, errorType: error.name });
+        }
+        showError('registerError', errorMsg);
     }
 }
 
@@ -169,14 +252,88 @@ async function login() {
 // ログアウト
 function logout() {
     authToken = null;
+    currentMode = null;
     localStorage.removeItem('authToken');
     localStorage.removeItem('username');
+    localStorage.removeItem('currentMode');
+    
     document.getElementById('loginForm').style.display = 'block';
     document.getElementById('userInfo').style.display = 'none';
+    
+    // モード選択画面に戻る
+    showStep(0);
     resetToStep1();
 }
 
-// ステップ1: SPIN質問生成
+// 診断開始（セッション開始＋チャット画面へ直接遷移）
+async function startDiagnosis() {
+    if (!authToken) {
+        alert('ログインしてください');
+        return;
+    }
+    
+    const industry = document.getElementById('industry').value.trim();
+    const value_proposition = document.getElementById('value_proposition').value.trim();
+    const customer_persona = document.getElementById('customer_persona').value.trim();
+    
+    if (window.logger) {
+        window.logger.info('診断開始', { industry, value_proposition, customer_persona });
+    }
+    
+    if (!industry || !value_proposition) {
+        if (window.logger) {
+            window.logger.warning('診断開始: 必須項目が不足しています', { industry, value_proposition });
+        }
+        alert('業界と価値提案は必須です');
+        return;
+    }
+    
+    showLoading('diagnosisStartResult');
+    
+    try {
+        // セッションを開始
+        const response = await fetch(`${API_BASE_URL}/session/start/`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Token ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                industry,
+                value_proposition,
+                customer_persona: customer_persona || undefined,
+                customer_pain: null // 顧客の課題は聞き出すべきなので、入力しない
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            currentSessionId = data.id;
+            
+            if (window.logger) {
+                window.logger.info('セッション開始成功、チャット画面へ遷移', { sessionId: currentSessionId });
+            }
+            
+            // 直接チャット画面へ遷移
+            showStep(3);
+            loadChatHistory();
+        } else {
+            showError('diagnosisStartResult', 'セッション開始に失敗しました: ' + (data.message || data.error || '不明なエラー'));
+        }
+    } catch (error) {
+        let errorMsg = 'エラーが発生しました: ' + error.message;
+        if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+            errorMsg = 'サーバーに接続できませんでした。\nバックエンドサーバー（http://localhost:8000）が起動しているか確認してください。';
+        }
+        if (window.logger) {
+            window.logger.error('診断開始エラー', { message: error.message, stack: error.stack, errorType: error.name });
+        }
+        showError('diagnosisStartResult', errorMsg);
+    }
+}
+
+// ステップ1: SPIN質問生成（使用されませんが、互換性のために残しています）
 async function generateSpinQuestions() {
     // SPIN質問生成は認証不要
     
@@ -338,9 +495,15 @@ async function generateSpinQuestions() {
         }
     } catch (error) {
         if (window.logger) {
-            window.logger.error('SPIN質問生成エラー', { message: error.message, stack: error.stack });
+            window.logger.error('SPIN質問生成エラー', { message: error.message, stack: error.stack, errorType: error.name });
         }
-        showError('spinQuestionsResult', 'エラー: ' + error.message);
+        
+        // Failed to fetchエラーの場合、サーバー接続の問題である可能性が高い
+        let errorMsg = 'エラー: ' + error.message;
+        if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+            errorMsg = 'サーバーに接続できませんでした。\nバックエンドサーバー（http://localhost:8000）が起動しているか確認してください。';
+        }
+        showError('spinQuestionsResult', errorMsg);
     }
 }
 
@@ -985,7 +1148,20 @@ function startNewSession() {
 
 // ステップ1にリセット
 function resetToStep1() {
-    showStep(1);
+    // モードが選択されていない場合は、モード選択画面に戻る
+    if (!currentMode) {
+        showStep(0);
+        return;
+    }
+    
+    // モードが選択されている場合は、そのモードの最初のステップに戻る
+    if (currentMode === 'simple') {
+        showStep(1);
+    } else if (currentMode === 'detailed') {
+        // 詳細診断モードの最初のステップ（後で実装）
+        showStep(1); // 暫定的にステップ1を表示
+    }
+    
     const spinResult = document.getElementById('spinQuestionsResult');
     if (spinResult) spinResult.style.display = 'none';
     

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SalesMind API テスト</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #007bff;
+            margin-top: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+        }
+        .error {
+            background-color: #fff3cd;
+            border-left-color: #ffc107;
+            color: #856404;
+        }
+        .success {
+            background-color: #d4edda;
+            border-left-color: #28a745;
+            color: #155724;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status-success {
+            background-color: #28a745;
+            color: white;
+        }
+        .status-error {
+            background-color: #dc3545;
+            color: white;
+        }
+        .token-info {
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 SalesMind API テストツール</h1>
+        <p>このページからSalesMind APIの動作確認ができます。</p>
+        
+        <div class="token-info">
+            <h3>認証設定</h3>
+            <div class="form-group">
+                <label>API Token:</label>
+                <input type="text" id="token" placeholder="Tokenを入力してください（testuserのTokenを取得）">
+                <button onclick="getToken()">Tokenを自動取得</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. SPIN質問生成 -->
+    <div class="container">
+        <h2>1. SPIN質問生成 <span class="status status-success" id="status1" style="display:none;">認証不要</span></h2>
+        <div class="form-group">
+            <label>業界:</label>
+            <input type="text" id="industry" value="IT" placeholder="例: IT">
+        </div>
+        <div class="form-group">
+            <label>価値提案:</label>
+            <input type="text" id="value_proposition" value="クラウド導入支援サービス" placeholder="例: クラウド導入支援サービス">
+        </div>
+        <div class="form-group">
+            <label>顧客像（オプション）:</label>
+            <input type="text" id="customer_persona" value="中堅IT企業のCTO" placeholder="例: 中堅IT企業のCTO">
+        </div>
+        <div class="form-group">
+            <label>顧客の課題（オプション）:</label>
+            <input type="text" id="customer_pain" value="既存システムの保守コスト削減" placeholder="例: 既存システムの保守コスト削減">
+        </div>
+        <button onclick="generateSpin()">SPIN質問を生成</button>
+        <div id="result1" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- 2. セッション開始 -->
+    <div class="container">
+        <h2>2. セッション開始 <span class="status status-error">認証必須</span></h2>
+        <div class="form-group">
+            <label>業界:</label>
+            <input type="text" id="session_industry" value="IT">
+        </div>
+        <div class="form-group">
+            <label>価値提案:</label>
+            <input type="text" id="session_value_proposition" value="クラウド導入支援サービス">
+        </div>
+        <div class="form-group">
+            <label>顧客像（オプション）:</label>
+            <input type="text" id="session_customer_persona" value="中堅IT企業のCTO">
+        </div>
+        <div class="form-group">
+            <label>顧客の課題（オプション）:</label>
+            <input type="text" id="session_customer_pain" value="既存システムの保守コスト削減">
+        </div>
+        <button onclick="startSession()">セッションを開始</button>
+        <div id="result2" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- 3. チャット -->
+    <div class="container">
+        <h2>3. チャット（AI顧客との対話） <span class="status status-error">認証必須</span></h2>
+        <div class="form-group">
+            <label>セッションID:</label>
+            <input type="text" id="chat_session_id" placeholder="セッション開始で取得したIDを入力">
+        </div>
+        <div class="form-group">
+            <label>メッセージ:</label>
+            <textarea id="chat_message" placeholder="営業担当者の質問を入力">現在のシステム運用体制について教えてください</textarea>
+        </div>
+        <button onclick="chatSession()">メッセージを送信</button>
+        <div id="result3" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- 4. セッション終了・スコアリング -->
+    <div class="container">
+        <h2>4. セッション終了・スコアリング <span class="status status-error">認証必須</span></h2>
+        <div class="form-group">
+            <label>セッションID:</label>
+            <input type="text" id="finish_session_id" placeholder="セッションIDを入力">
+        </div>
+        <button onclick="finishSession()">セッションを終了してスコアリング</button>
+        <div id="result4" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- 5. レポート取得 -->
+    <div class="container">
+        <h2>5. レポート取得 <span class="status status-error">認証必須</span></h2>
+        <div class="form-group">
+            <label>レポートID:</label>
+            <input type="number" id="report_id" placeholder="レポートIDを入力">
+        </div>
+        <button onclick="getReport()">レポートを取得</button>
+        <div id="result5" class="result" style="display:none;"></div>
+    </div>
+
+    <script>
+        const baseUrl = 'http://localhost:8000/api';
+
+        async function getToken() {
+            try {
+                const response = await fetch('http://localhost:8000/admin/');
+                if (!response.ok) throw new Error('サーバーに接続できません');
+                alert('Tokenを自動取得するには、PowerShellで以下のコマンドを実行してください:\n\ndocker compose exec web python manage.py shell -c "from django.contrib.auth.models import User; from rest_framework.authtoken.models import Token; user, _ = User.objects.get_or_create(username=\'testuser\', defaults={\'email\': \'test@example.com\'}); user.set_password(\'testpass123\'); user.save(); token, _ = Token.objects.get_or_create(user=user); print(token.key)"');
+            } catch (error) {
+                showResult('result1', 'サーバーに接続できません。Docker Composeが起動しているか確認してください。', 'error');
+            }
+        }
+
+        function getHeaders() {
+            const token = document.getElementById('token').value;
+            return {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Token ${token}` } : {})
+            };
+        }
+
+        function showResult(elementId, data, type = 'success') {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = `result ${type}`;
+            element.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
+
+        async function generateSpin() {
+            const data = {
+                industry: document.getElementById('industry').value,
+                value_proposition: document.getElementById('value_proposition').value,
+                customer_persona: document.getElementById('customer_persona').value || undefined,
+                customer_pain: document.getElementById('customer_pain').value || undefined
+            };
+
+            try {
+                const response = await fetch(`${baseUrl}/spin/generate/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showResult('result1', result, 'success');
+                } else {
+                    showResult('result1', result, 'error');
+                }
+            } catch (error) {
+                showResult('result1', { error: error.message }, 'error');
+            }
+        }
+
+        async function startSession() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                alert('Tokenを入力してください');
+                return;
+            }
+
+            const data = {
+                industry: document.getElementById('session_industry').value,
+                value_proposition: document.getElementById('session_value_proposition').value,
+                customer_persona: document.getElementById('session_customer_persona').value || undefined,
+                customer_pain: document.getElementById('session_customer_pain').value || undefined
+            };
+
+            try {
+                const response = await fetch(`${baseUrl}/session/start/`, {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    document.getElementById('chat_session_id').value = result.id;
+                    document.getElementById('finish_session_id').value = result.id;
+                    showResult('result2', result, 'success');
+                } else {
+                    showResult('result2', result, 'error');
+                }
+            } catch (error) {
+                showResult('result2', { error: error.message }, 'error');
+            }
+        }
+
+        async function chatSession() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                alert('Tokenを入力してください');
+                return;
+            }
+
+            const data = {
+                session_id: document.getElementById('chat_session_id').value,
+                message: document.getElementById('chat_message').value
+            };
+
+            try {
+                const response = await fetch(`${baseUrl}/session/chat/`, {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showResult('result3', result, 'success');
+                } else {
+                    showResult('result3', result, 'error');
+                }
+            } catch (error) {
+                showResult('result3', { error: error.message }, 'error');
+            }
+        }
+
+        async function finishSession() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                alert('Tokenを入力してください');
+                return;
+            }
+
+            const data = {
+                session_id: document.getElementById('finish_session_id').value
+            };
+
+            try {
+                const response = await fetch(`${baseUrl}/session/finish/`, {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    document.getElementById('report_id').value = result.report_id;
+                    showResult('result4', result, 'success');
+                } else {
+                    showResult('result4', result, 'error');
+                }
+            } catch (error) {
+                showResult('result4', { error: error.message }, 'error');
+            }
+        }
+
+        async function getReport() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                alert('Tokenを入力してください');
+                return;
+            }
+
+            const reportId = document.getElementById('report_id').value;
+            if (!reportId) {
+                alert('レポートIDを入力してください');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${baseUrl}/report/${reportId}/`, {
+                    method: 'GET',
+                    headers: getHeaders()
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showResult('result5', result, 'success');
+                } else {
+                    showResult('result5', result, 'error');
+                }
+            } catch (error) {
+                showResult('result5', { error: error.message }, 'error');
+            }
+        }
+
+        // Token自動取得の試行
+        async function tryGetToken() {
+            try {
+                // PowerShellコマンド経由でTokenを取得するのは難しいので、手動入力に誘導
+                document.getElementById('token').placeholder = 'Tokenを手動で入力するか、PowerShellスクリプトを実行してください';
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        // ページ読み込み時にサーバー状態を確認
+        window.onload = async function() {
+            try {
+                const response = await fetch('http://localhost:8000/admin/');
+                if (response.ok) {
+                    console.log('サーバーは正常に起動しています');
+                }
+            } catch (error) {
+                alert('サーバーに接続できません。Docker Composeが起動しているか確認してください。\n\n起動コマンド: docker compose up -d');
+            }
+        };
+    </script>
+</body>
+</html>
+

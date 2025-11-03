@@ -13,5 +13,9 @@ urlpatterns = [
     path('session/chat/', views.chat_session, name='chat_session'),
     path('session/finish/', views.finish_session, name='finish_session'),
     path('report/<int:id>/', views.get_report, name='get_report'),
+    # 企業スクレイピング関連
+    path('company/scrape/', views.scrape_company, name='scrape_company'),
+    path('company/scrape-from-sitemap/', views.scrape_from_sitemap, name='scrape_from_sitemap'),
+    path('company/analyze/', views.analyze_company, name='analyze_company'),
 ]
 

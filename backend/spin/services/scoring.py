@@ -24,7 +24,7 @@ def score_conversation(session, conversation_history):
 - 業界: {session.industry}
 - 価値提案: {session.value_proposition}
 - 顧客像: {session.customer_persona or '未設定'}
-- 顧客の課題: {session.customer_pain or '未設定'}
+注意: 顧客の課題は事前に設定されていません。営業担当者が会話を通じて顧客の課題を聞き出すことが重要です。
 
 会話履歴:
 {conversation_text}
@@ -39,11 +39,13 @@ def score_conversation(session, conversation_history):
 - 情報の深掘り度合い（30点）
 
 【Problem（問題発見）の評価基準】
-- 顧客の課題を特定できているか（25点）
-- 問題の具体的な内容を把握できているか（25点）
+- 顧客の課題を聞き出せているか（20点）
+  * 営業担当者が顧客に対して質問を行い、顧客の課題を引き出せているか
+  * 顧客から課題を聞き出すことができているか（課題が事前に分かっている必要はない）
+- 特定した課題の具体的な内容を把握できているか（25点）
 - 問題の優先度を理解できているか（15点）
 - 質問の適切性・自然さ（15点）
-- 問題の根本原因を探れているか（20点）
+- 問題の根本原因を探れているか（25点）
 
 【Implication（示唆）の評価基準】
 - 問題の影響範囲を把握できているか（25点）
