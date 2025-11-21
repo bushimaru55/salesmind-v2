@@ -45,7 +45,7 @@
             <section id="step0" class="step-section active">
                 <h2>診断モードを選択してください</h2>
                 <div class="mode-selection-container">
-                    <div class="mode-card" onclick="selectMode('simple')">
+                    <div class="mode-card">
                         <div class="mode-icon">⚡</div>
                         <h3>簡易診断モード</h3>
                         <p class="mode-description">手軽にSPIN質問を生成してトレーニングを開始できます</p>
@@ -54,9 +54,12 @@
                             <li>✓ 企業情報不要</li>
                             <li>✓ すぐにトレーニング開始</li>
                         </ul>
-                        <button class="mode-select-btn">このモードを選択</button>
+                        <div class="mode-buttons">
+                            <button class="mode-select-btn" onclick="selectMode('simple')">このモードを選択</button>
+                            <button class="mode-ranking-btn" onclick="showRanking('simple')">🏆 ランキング</button>
+                        </div>
                     </div>
-                    <div class="mode-card" onclick="selectMode('detailed')">
+                    <div class="mode-card">
                         <div class="mode-icon">🔍</div>
                         <h3>詳細診断モード</h3>
                         <p class="mode-description">企業情報を取得して、より実践的なトレーニングが可能です</p>
@@ -65,7 +68,10 @@
                             <li>✓ SPIN適合性分析</li>
                             <li>✓ 具体的な質問生成</li>
                         </ul>
-                        <button class="mode-select-btn">このモードを選択</button>
+                        <div class="mode-buttons">
+                            <button class="mode-select-btn" onclick="selectMode('detailed')">このモードを選択</button>
+                            <button class="mode-ranking-btn" onclick="showRanking('detailed')">🏆 ランキング</button>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -161,7 +167,10 @@
                                 <p class="success-spin-item" id="successSpinStage"></p>
                                 <p class="success-spin-item" id="successSpinMessage"></p>
                                 <p class="success-spin-item" id="successSpinAppropriateness"></p>
+                                <p class="success-spin-item" id="successSpinEvaluation"></p>
+                                <p class="success-spin-item" id="successSpinSessionStage"></p>
                             </div>
+                            <div class="success-system-notes" id="successSystemNotes" style="display: none;"></div>
                         </div>
                     </div>
                     
@@ -217,6 +226,26 @@
                 <button onclick="refreshSessionList()" class="btn-secondary">更新</button>
                 <div id="sessionListContent" class="session-list">
                     <!-- セッション一覧がここに表示される -->
+                </div>
+            </section>
+
+            <!-- ランキング画面 -->
+            <section id="ranking" class="step-section" style="display: none;">
+                <div class="step-header">
+                    <h2 id="rankingTitle">ランキング</h2>
+                    <button onclick="returnToModeSelection()" class="btn-back-to-mode">← モード選択に戻る</button>
+                </div>
+                <div id="rankingContent" class="ranking-content">
+                    <div class="ranking-loading" id="rankingLoading">
+                        <p>ランキングを読み込み中...</p>
+                    </div>
+                    <div class="ranking-table-container" id="rankingTable" style="display: none;">
+                        <!-- ランキングテーブルがここに表示される -->
+                    </div>
+                    <div class="ranking-empty" id="rankingEmpty" style="display: none;">
+                        <p>まだランキングデータがありません。</p>
+                        <p>診断を完了するとランキングに表示されます。</p>
+                    </div>
                 </div>
             </section>
         </main>

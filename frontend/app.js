@@ -1,5 +1,5 @@
-// API設定
-const API_BASE_URL = 'http://localhost:8000/api';
+// API設定（nginx経由でアクセスする場合は相対パスを使用）
+const API_BASE_URL = window.location.origin + '/api';
 let authToken = localStorage.getItem('authToken');
 let currentSessionId = null;
 let currentReportId = null;
@@ -1138,7 +1138,10 @@ async function sendChatMessage() {
                 updateSuccessProbability(data.success_probability, data.success_delta, data.analysis_reason, {
                     currentStage: data.current_spin_stage,
                     messageSpinType: data.message_spin_type,
-                    stepAppropriateness: data.step_appropriateness
+                    stepAppropriateness: data.step_appropriateness,
+                    stageEvaluation: data.stage_evaluation,
+                    sessionStage: data.session_spin_stage,
+                    systemNotes: data.system_notes
                 });
                 
                 // ログに記録
@@ -1149,7 +1152,9 @@ async function sendChatMessage() {
                         analysis_reason: data.analysis_reason,
                         current_spin_stage: data.current_spin_stage,
                         message_spin_type: data.message_spin_type,
-                        step_appropriateness: data.step_appropriateness
+                        step_appropriateness: data.step_appropriateness,
+                        stage_evaluation: data.stage_evaluation,
+                        session_spin_stage: data.session_spin_stage
                     });
                 }
             }
@@ -1226,7 +1231,10 @@ async function loadChatHistory() {
                 showSuccessMeter();
                 // 初期成功率を表示（セッションの成功率）
                 const initialProbability = data.success_probability !== undefined ? data.success_probability : 50;
-                updateSuccessProbability(initialProbability, 0, null);
+                updateSuccessProbability(initialProbability, 0, null, {
+                    currentStage: data.current_spin_stage,
+                    sessionStage: data.current_spin_stage
+                });
             } else {
                 // 簡易診断モードの場合は非表示
                 hideSuccessMeter();
@@ -1340,6 +1348,11 @@ function hideSuccessMeter() {
     if (deltaDisplay) {
         deltaDisplay.style.display = 'none';
     }
+    const systemNotes = document.getElementById('successSystemNotes');
+    if (systemNotes) {
+        systemNotes.style.display = 'none';
+        systemNotes.textContent = '';
+    }
 }
 
 // 成功率を更新
@@ -1353,7 +1366,10 @@ function updateSuccessProbability(probability, delta, reason, metadata = {}) {
     const stageEl = document.getElementById('successSpinStage');
     const messageEl = document.getElementById('successSpinMessage');
     const stepEl = document.getElementById('successSpinAppropriateness');
-    const { currentStage, messageSpinType, stepAppropriateness } = metadata;
+    const evaluationEl = document.getElementById('successSpinEvaluation');
+    const sessionStageEl = document.getElementById('successSpinSessionStage');
+    const systemNotesEl = document.getElementById('successSystemNotes');
+    const { currentStage, messageSpinType, stepAppropriateness, stageEvaluation, sessionStage, systemNotes } = metadata;
     
     if (probabilityValue) {
         // アニメーションを追加
@@ -1403,9 +1419,16 @@ function updateSuccessProbability(probability, delta, reason, metadata = {}) {
         regression: '逆戻り',
         unknown: '判定不能'
     };
+    const evalLabelMap = {
+        advance: '段階が前進しました',
+        repeat: '同じ段階での深掘り',
+        regression: '段階が逆戻りしています',
+        jump: '段階を飛び越えています',
+        unknown: '段階を判定できません'
+    };
     
     if (spinMeta) {
-        const hasMeta = Boolean(currentStage || messageSpinType || stepAppropriateness);
+        const hasMeta = Boolean(currentStage || messageSpinType || stepAppropriateness || stageEvaluation || sessionStage);
         if (hasMeta) {
             spinMeta.style.display = 'block';
             if (stageEl) {
@@ -1423,6 +1446,16 @@ function updateSuccessProbability(probability, delta, reason, metadata = {}) {
                 stepEl.textContent = stepLabel ? `ステップ適切性: ${stepLabel}` : '';
                 stepEl.style.display = stepLabel ? 'block' : 'none';
             }
+            if (evaluationEl) {
+                const evalLabel = stageEvaluation ? (evalLabelMap[stageEvaluation] || stageEvaluation) : '';
+                evaluationEl.textContent = evalLabel ? `段階評価: ${evalLabel}` : '';
+                evaluationEl.style.display = evalLabel ? 'block' : 'none';
+            }
+            if (sessionStageEl) {
+                const sessionStageLabel = sessionStage ? (stageLabelMap[sessionStage] || sessionStage) : '';
+                sessionStageEl.textContent = sessionStageLabel ? `システム段階: ${sessionStageLabel}` : '';
+                sessionStageEl.style.display = sessionStageLabel ? 'block' : 'none';
+            }
         } else {
             spinMeta.style.display = 'none';
             if (stageEl) {
@@ -1437,6 +1470,23 @@ function updateSuccessProbability(probability, delta, reason, metadata = {}) {
                 stepEl.textContent = '';
                 stepEl.style.display = 'none';
             }
+            if (evaluationEl) {
+                evaluationEl.textContent = '';
+                evaluationEl.style.display = 'none';
+            }
+            if (sessionStageEl) {
+                sessionStageEl.textContent = '';
+                sessionStageEl.style.display = 'none';
+            }
+        }
+    }
+    if (systemNotesEl) {
+        if (systemNotes) {
+            systemNotesEl.textContent = systemNotes;
+            systemNotesEl.style.display = 'block';
+        } else {
+            systemNotesEl.textContent = '';
+            systemNotesEl.style.display = 'none';
         }
     }
 }
@@ -1816,5 +1866,126 @@ function showChatLoading() {
 // チャットエラー表示
 function showChatError(message) {
     addChatMessage('customer', `[エラー] ${message}`);
+}
+
+// ランキング表示
+async function showRanking(mode) {
+    if (window.logger) {
+        window.logger.info('ランキングを表示', { mode });
+    }
+    
+    showStep('ranking');
+    
+    const rankingTitle = document.getElementById('rankingTitle');
+    const rankingLoading = document.getElementById('rankingLoading');
+    const rankingTable = document.getElementById('rankingTable');
+    const rankingEmpty = document.getElementById('rankingEmpty');
+    
+    // タイトルを設定
+    if (rankingTitle) {
+        rankingTitle.textContent = mode === 'simple' ? '簡易診断モード ランキング' : '詳細診断モード ランキング';
+    }
+    
+    // ローディング表示
+    if (rankingLoading) rankingLoading.style.display = 'block';
+    if (rankingTable) rankingTable.style.display = 'none';
+    if (rankingEmpty) rankingEmpty.style.display = 'none';
+    
+    try {
+        const endpoint = mode === 'simple' ? 'ranking/simple/' : 'ranking/detailed/';
+        const response = await fetch(`${API_BASE_URL}/${endpoint}`);
+        
+        if (!response.ok) {
+            throw new Error(`ランキング取得に失敗しました: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // ローディング非表示
+        if (rankingLoading) rankingLoading.style.display = 'none';
+        
+        if (!data.ranking || data.ranking.length === 0) {
+            // データがない場合
+            if (rankingEmpty) rankingEmpty.style.display = 'block';
+        } else {
+            // ランキングテーブルを表示
+            displayRanking(data, mode);
+            if (rankingTable) rankingTable.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('ランキング取得エラー:', error);
+        if (window.logger) {
+            window.logger.error('ランキング取得エラー', { error: error.message });
+        }
+        
+        if (rankingLoading) rankingLoading.style.display = 'none';
+        if (rankingTable) {
+            rankingTable.innerHTML = `<div class="error-message">ランキングの取得に失敗しました: ${error.message}</div>`;
+            rankingTable.style.display = 'block';
+        }
+    }
+}
+
+// ランキングテーブルを表示
+function displayRanking(data, mode) {
+    const rankingTable = document.getElementById('rankingTable');
+    if (!rankingTable) return;
+    
+    const ranking = data.ranking || [];
+    
+    let html = '<table class="ranking-table">';
+    html += '<thead><tr>';
+    
+    if (mode === 'simple') {
+        html += '<th>順位</th><th>ユーザー名</th><th>業界</th><th>総合スコア</th><th>S</th><th>P</th><th>I</th><th>N</th><th>メッセージ数</th><th>完了日時</th>';
+    } else {
+        html += '<th>順位</th><th>ユーザー名</th><th>企業名</th><th>総合評価</th><th>スコア</th><th>成功率</th><th>S</th><th>P</th><th>I</th><th>N</th><th>メッセージ数</th><th>完了日時</th>';
+    }
+    
+    html += '</tr></thead><tbody>';
+    
+    ranking.forEach((entry, index) => {
+        const rankClass = index < 3 ? `rank-${index + 1}` : '';
+        html += '<tr class="' + rankClass + '">';
+        html += `<td class="rank-cell">${entry.rank}</td>`;
+        html += `<td class="username-cell">${escapeHtml(entry.username)}</td>`;
+        
+        if (mode === 'simple') {
+            html += `<td class="industry-cell">${escapeHtml(entry.industry || '-')}</td>`;
+            html += `<td class="score-cell total">${entry.total_score}点</td>`;
+            html += `<td class="score-cell">${entry.situation_score}点</td>`;
+            html += `<td class="score-cell">${entry.problem_score}点</td>`;
+            html += `<td class="score-cell">${entry.implication_score}点</td>`;
+            html += `<td class="score-cell">${entry.need_score}点</td>`;
+            html += `<td class="count-cell">${entry.message_count}件</td>`;
+            const finishedDate = entry.finished_at ? new Date(entry.finished_at).toLocaleString('ja-JP') : '-';
+            html += `<td class="date-cell">${finishedDate}</td>`;
+        } else {
+            html += `<td class="company-cell">${escapeHtml(entry.company_name || entry.industry || '-')}</td>`;
+            html += `<td class="score-cell composite">${entry.composite_score}点</td>`;
+            html += `<td class="score-cell">${entry.total_score}点</td>`;
+            html += `<td class="score-cell">${entry.success_probability}%</td>`;
+            html += `<td class="score-cell">${entry.situation_score}点</td>`;
+            html += `<td class="score-cell">${entry.problem_score}点</td>`;
+            html += `<td class="score-cell">${entry.implication_score}点</td>`;
+            html += `<td class="score-cell">${entry.need_score}点</td>`;
+            html += `<td class="count-cell">${entry.message_count}件</td>`;
+            const finishedDate = entry.finished_at ? new Date(entry.finished_at).toLocaleString('ja-JP') : '-';
+            html += `<td class="date-cell">${finishedDate}</td>`;
+        }
+        
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    
+    rankingTable.innerHTML = html;
+}
+
+// HTMLエスケープ
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 

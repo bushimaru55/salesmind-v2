@@ -15,42 +15,67 @@ SalesMindは、営業担当者がAIと模擬商談を行い、SPIN思考（状�
 
 ### 必要な環境
 
-- Docker Desktop
+- Docker Desktop（必須）
 - Git
 
-### 起動方法
+### 起動方法（Docker環境 - 標準）
 
-1. リポジトリをクローン
+1. **リポジトリをクローン**
 ```bash
 git clone https://github.com/bushimaru55/salesmind.git
 cd salesmind
 ```
 
-2. 環境変数ファイルを作成
+2. **環境変数ファイルを作成**
 ```bash
 # .env.exampleをコピーして.envを作成
 cp .env.example .env
 
 # .envファイルを編集して以下を設定：
-# - SECRET_KEY: Djangoのシークレットキー（自動生成可）
-# - OPENAI_API_KEY: OpenAI APIキー
+# - SECRET_KEY: Djangoのシークレットキー（本番環境では必ず変更）
+# - OPENAI_API_KEY: OpenAI APIキー（必須）
+# - USE_SQLITE: False（Docker環境ではPostgreSQLを使用）
 ```
 
-3. Docker Composeで起動
+3. **Docker Composeでビルド・起動**
 ```bash
 docker compose build
 docker compose up -d
 ```
 
-4. マイグレーション実行
+4. **マイグレーション実行（初回のみ、またはマイグレーション追加時）**
 ```bash
 docker compose exec web python manage.py migrate
 ```
 
-5. スーパーユーザー作成（オプション）
+5. **スーパーユーザー作成（オプション）**
 ```bash
 docker compose exec web python manage.py createsuperuser
 ```
+
+6. **アクセス**
+- **フロントエンド**: http://localhost:8080/
+- **API**: http://localhost:8000/api/
+- **Django Admin**: http://localhost:8080/admin/
+
+### ローカル開発環境（SQLite使用 - オプション）
+
+ローカル開発時のみ、SQLiteを使用することも可能です。
+
+`.env`ファイルに以下を追加：
+```
+USE_SQLITE=True
+```
+
+その後、通常のDjango開発サーバーを起動：
+```bash
+cd backend
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
+```
+
+**注意**: Docker環境では`USE_SQLITE=False`（デフォルト）でPostgreSQLを使用します。
 
 ## APIエンドポイント
 
@@ -244,25 +269,43 @@ curl -X GET "$BASE_URL/report/$REPORT_ID/" \
 
 ## 動作確認
 
-### 1. サーバーが起動しているか確認
-
-```bash
-curl http://localhost:8000/admin/
-```
-
-### 2. コンテナの状態確認
+### 1. コンテナの状態確認
 
 ```bash
 docker compose ps
 ```
 
-### 3. ログの確認
+すべてのコンテナ（web, db, frontend）が`Up`状態であることを確認してください。
+
+### 2. フロントエンドへのアクセス確認
+
+ブラウザで http://localhost:8080/ にアクセスし、アプリケーションが表示されることを確認してください。
+
+### 3. APIエンドポイントの確認
 
 ```bash
-docker compose logs web
+curl http://localhost:8000/api/spin/generate/ -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"industry":"IT","value_proposition":"クラウド導入支援サービス"}'
 ```
 
-### 4. データベース確認
+### 4. ログの確認
+
+```bash
+# バックエンドログ
+docker compose logs web
+
+# フロントエンドログ
+docker compose logs frontend
+
+# データベースログ
+docker compose logs db
+
+# すべてのログをリアルタイムで確認
+docker compose logs -f
+```
+
+### 5. データベース確認
 
 ```bash
 docker compose exec web python manage.py shell
@@ -289,16 +332,39 @@ docker compose restart web
 
 ### コードの変更を反映
 
-Docker Composeのvolumeマウントにより、コードの変更は自動的に反映されます。ただし、Djangoの設定変更などは再起動が必要です。
+Docker Composeのvolumeマウントにより、コードの変更は自動的に反映されます。
+
+- **バックエンド**: `./backend`ディレクトリの変更は自動反映（Djangoの設定変更などは再起動が必要）
+- **フロントエンド**: `./frontend`ディレクトリの変更は自動反映（nginxの再起動は不要）
 
 ```bash
+# バックエンドのみ再起動（設定変更時）
 docker compose restart web
+
+# すべてのコンテナを再起動
+docker compose restart
 ```
 
 ### マイグレーション
 
 ```bash
+# マイグレーションファイルの作成
 docker compose exec web python manage.py makemigrations
+
+# マイグレーションの適用
 docker compose exec web python manage.py migrate
+```
+
+### コンテナの停止・削除
+
+```bash
+# コンテナを停止（データは保持）
+docker compose stop
+
+# コンテナを停止して削除（データは保持）
+docker compose down
+
+# コンテナとボリュームを完全に削除（データも削除）
+docker compose down -v
 ```
 

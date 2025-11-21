@@ -21,7 +21,6 @@
     width: 100%;
     max-width: 400px;
     text-align: center;
-    cursor: pointer;
     transition: all 0.3s ease;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
@@ -64,6 +63,13 @@
     padding-left: 10px;
 }
 
+.mode-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 20px;
+}
+
 .mode-select-btn {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
@@ -74,8 +80,25 @@
     font-weight: bold;
     cursor: pointer;
     transition: all 0.3s;
-    margin-top: 20px;
     width: 100%;
+}
+
+.mode-ranking-btn {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s;
+    width: 100%;
+}
+
+.mode-ranking-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(245, 87, 108, 0.4);
 }
 
 .mode-select-btn:hover {
@@ -540,6 +563,16 @@ body {
     margin: 0;
 }
 
+.success-system-notes {
+    margin-top: 10px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 0.9em;
+    line-height: 1.5;
+}
+
 @keyframes slideIn {
     from {
         opacity: 0;
@@ -974,6 +1007,165 @@ body {
     
     .score-details {
         grid-template-columns: 1fr;
+    }
+}
+
+/* ランキングスタイル */
+.ranking-content {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.ranking-loading {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+    font-size: 1.1em;
+}
+
+.ranking-empty {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+}
+
+.ranking-empty p {
+    margin: 10px 0;
+    font-size: 1.1em;
+}
+
+.ranking-table-container {
+    overflow-x: auto;
+    margin-top: 20px;
+}
+
+.ranking-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.ranking-table thead {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.ranking-table th {
+    padding: 15px;
+    text-align: left;
+    font-weight: bold;
+    font-size: 1em;
+}
+
+.ranking-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.ranking-table tbody tr:hover {
+    background-color: #f5f5f5;
+}
+
+.ranking-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.rank-1 {
+    background-color: #fff9e6 !important;
+}
+
+.rank-1 .rank-cell {
+    font-weight: bold;
+    color: #ffd700;
+    font-size: 1.2em;
+}
+
+.rank-2 {
+    background-color: #f0f0f0 !important;
+}
+
+.rank-2 .rank-cell {
+    font-weight: bold;
+    color: #c0c0c0;
+    font-size: 1.1em;
+}
+
+.rank-3 {
+    background-color: #ffe4d6 !important;
+}
+
+.rank-3 .rank-cell {
+    font-weight: bold;
+    color: #cd7f32;
+    font-size: 1.1em;
+}
+
+.rank-cell {
+    font-weight: bold;
+    text-align: center;
+    width: 60px;
+}
+
+.username-cell {
+    font-weight: 500;
+    color: #333;
+}
+
+.score-cell {
+    text-align: right;
+    font-weight: 500;
+    color: #555;
+}
+
+.score-cell.composite {
+    font-weight: bold;
+    color: #667eea;
+    font-size: 1.1em;
+}
+
+.count-cell {
+    text-align: center;
+    color: #666;
+}
+
+.industry-cell,
+.company-cell {
+    font-weight: 500;
+    color: #444;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.date-cell {
+    font-size: 0.9em;
+    color: #666;
+    white-space: nowrap;
+}
+
+.score-cell.total {
+    font-weight: bold;
+    color: #667eea;
+    font-size: 1.1em;
+}
+
+@media (max-width: 768px) {
+    .ranking-table {
+        font-size: 0.9em;
+    }
+    
+    .ranking-table th,
+    .ranking-table td {
+        padding: 8px;
+    }
+    
+    .mode-buttons {
+        flex-direction: column;
     }
 }
 

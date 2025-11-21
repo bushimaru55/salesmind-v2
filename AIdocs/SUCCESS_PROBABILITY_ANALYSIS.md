@@ -26,17 +26,22 @@
     ```python
     success_probability = models.IntegerField(default=50, help_text="現在の商談成功率 (0-100%)")
     last_analysis_reason = models.TextField(null=True, blank=True, help_text="直近の変動理由")
+    current_spin_stage = models.CharField(max_length=1, choices=[('S','状況'),('P','課題'),('I','示唆'),('N','解決')], default='S')
     ```
 - 初期化: `start_session` 詳細診断モードで 50% にセット。
+- `current_spin_stage` はサーバー側の段階判定に利用し、会話の進行状態を保持する。
 
-### 3.2 `ChatMessage` 拡張（オプション）
+### 3.2 `ChatMessage` 拡張
 
-- 各メッセージに分析結果を紐付ける場合は以下のフィールドを検討。
+- 各メッセージに分析結果を紐付ける。
     ```python
     success_delta = models.IntegerField(null=True, blank=True, help_text="この発言による成功率変動")
     analysis_summary = models.TextField(null=True, blank=True, help_text="分析サマリー")
+    spin_stage = models.CharField(max_length=1, choices=Session.SPIN_STAGE_CHOICES, null=True, blank=True)
+    stage_evaluation = models.CharField(max_length=20, choices=[('advance','前進'),('repeat','同段階'),('regression','逆戻り'),('jump','飛び越し'),('unknown','判定不能')], null=True, blank=True)
+    system_notes = models.TextField(null=True, blank=True)
     ```
-- 必須ではないが、チャート表示やレポート機能拡張に備えて持っておくと便利。
+- 営業担当者メッセージに対し、サーバー側で判定したステージと評価結果を永続化。
 
 ## 4. API 仕様
 
@@ -53,9 +58,17 @@
         - `success_delta`: -5〜+5 の成功率変動値
         - `reason`: 変動理由テキスト（SPIN観点を含む）
         - `notes`: 補足情報（任意）
-    4. `success_delta` を `Session.success_probability` に適用し、0〜100 でクリップ。
-    5. `ChatMessage.analysis_summary` に SPIN評価の要約（変動理由／段階／適切性）を保存。
-    6. 応答 JSON に成功率と SPIN 評価情報をセットしフロントへ返却。
+- **サーバー側補正ロジック**:
+    - `Session.current_spin_stage` と `message_spin_type` を比較し、差分に応じて `success_delta` を補正。
+        - `diff == 1`（前進）: `max(base_delta, +2)` に補正。
+        - `diff == 0`（同段階）: `base_delta` を `[-1, +1]` へクランプ。
+        - `diff < 0`（逆戻り）: `min(base_delta, -2)`。
+        - `diff > 1`（飛び越し）: `min(base_delta, -3)`。
+        - 未判定 (`unknown`): `min(base_delta, 0)`。
+    - 補正後の値を -5〜+5 で再クランプ。
+    - 段階評価（advance / repeat / regression / jump / unknown）を算出し、`ChatMessage.stage_evaluation` に保存。
+    - 前進または同段階の時は `Session.current_spin_stage` を更新。
+    - API レスポンスに `stage_evaluation`, `session_spin_stage`, `system_notes` を追加。
 
 ### 4.2 OpenAI プロンプト（分析用）
 
@@ -74,12 +87,12 @@
 
 - `success_delta` の範囲: -5 〜 +5
 - 評価観点
-    1. SPIN進行段階が適切か（S→P→I→N の順序、逆戻りや飛び越しの有無）
+    1. SPIN進行段階が適切か（サーバー側で段階差分を計算し補正）
     2. 現在段階に応じた質問の質（Situation/Problem/Implication/Need-Payoff）
     3. 企業情報や価値提案との関連性
     4. 顧客視点・共感の度合い
-- OpenAI 応答には SPIN判定3要素（current_spin_stage, message_spin_type, step_appropriateness）と理由が必須。
-- Django 側では値域チェック後、`ChatMessage.analysis_summary` に SPIN 情報を追記。
+- OpenAI 応答には SPIN判定3要素（`current_spin_stage`, `message_spin_type`, `step_appropriateness`）と理由が必須。
+- Django 側では `Session.current_spin_stage` を基に補正ロジックを適用し、`ChatMessage` に詳細を保存。成功率は補正後の値で更新する。
 
 ### 6.2 キャッシュ / コスト対策
 

@@ -11,9 +11,10 @@
 |------|------|------|
 | Backend | Django 5 + Django REST Framework | APIエンドポイント構築用 |
 | AI | OpenAI GPT-4o-mini | SPIN質問生成・顧客ロールプレイ・スコアリング |
-| Database | PostgreSQL（開発中はSQLiteでも可） | ORM管理 |
-| Infra | Docker Compose | web＋dbの2コンテナ構成 |
-| Frontend（後期追加） | Next.js | MVPでは未実装可 |
+| Database | PostgreSQL 16 | Docker環境標準（ローカル開発時のみSQLite可） |
+| Infra | Docker Compose | web＋db＋frontendの3コンテナ構成 |
+| Frontend | 静的HTML/JS/CSS | nginxで配信 |
+| Web Server | nginx (alpine) | フロントエンド配信・APIプロキシ |
 
 ---
 
@@ -64,6 +65,8 @@ services:
       - .env
     depends_on:
       - db
+    networks:
+      - salesmind_network
   db:
     image: postgres:16
     container_name: salesmind_db
@@ -73,8 +76,26 @@ services:
       POSTGRES_PASSWORD: postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data/
+    networks:
+      - salesmind_network
+  frontend:
+    image: nginx:alpine
+    container_name: salesmind_frontend
+    ports:
+      - "8080:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - web
+    networks:
+      - salesmind_network
 volumes:
   postgres_data:
+
+networks:
+  salesmind_network:
+    driver: bridge
 ```
 
 ---
@@ -93,14 +114,62 @@ CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 
 **.env.example**
 ```
+# Django設定
 DEBUG=True
-SECRET_KEY=your-secret-key-here
+SECRET_KEY=your-secret-key-here-change-in-production
+
+# OpenAI API設定
 OPENAI_API_KEY=sk-xxxxx
+
+# PostgreSQL設定（Docker環境用）
 POSTGRES_DB=salesmind
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 POSTGRES_HOST=db
 POSTGRES_PORT=5432
+
+# SQLite使用フラグ（ローカル開発用、Docker環境ではFalse）
+USE_SQLITE=False
+```
+
+**nginx.conf**（フロントエンド配信用）
+```nginx
+server {
+    listen 80;
+    server_name localhost;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # フロントエンドの静的ファイル
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+
+    # APIリクエストをバックエンドにプロキシ
+    location /api/ {
+        proxy_pass http://web:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Django Adminもバックエンドにプロキシ
+    location /admin/ {
+        proxy_pass http://web:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # 静的ファイルのキャッシュ設定
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}
 ```
 
 ---
@@ -897,12 +966,55 @@ SPIN質問を各3〜5個ずつ日本語で生成してください。
 ---
 
 ## 🧪 実行手順
+
+### Docker環境での起動（標準）
+
+1. **環境変数ファイルの作成**
+```bash
+# .env.exampleをコピーして.envを作成
+cp .env.example .env
+
+# .envファイルを編集して以下を設定：
+# - SECRET_KEY: Djangoのシークレットキー
+# - OPENAI_API_KEY: OpenAI APIキー
+```
+
+2. **Docker Composeでビルド・起動**
 ```bash
 docker compose build
 docker compose up -d
-docker compose exec web python manage.py migrate
-curl -X POST http://localhost:8000/spin/generate/ -H "Content-Type: application/json" -d '{"industry":"IT","value_prop":"クラウド導入支援"}'
 ```
+
+3. **マイグレーション実行（初回のみ、またはマイグレーション追加時）**
+```bash
+docker compose exec web python manage.py migrate
+```
+
+4. **スーパーユーザー作成（オプション）**
+```bash
+docker compose exec web python manage.py createsuperuser
+```
+
+5. **アクセス**
+- フロントエンド: http://localhost:8080/
+- API: http://localhost:8000/api/
+- Django Admin: http://localhost:8080/admin/
+
+### ローカル開発環境（SQLite使用）
+
+ローカル開発時のみ、SQLiteを使用することも可能です。`.env`ファイルに以下を追加：
+```
+USE_SQLITE=True
+```
+
+その後、通常のDjango開発サーバーを起動：
+```bash
+cd backend
+python manage.py migrate
+python manage.py runserver
+```
+
+**注意**: Docker環境では`USE_SQLITE=False`（デフォルト）でPostgreSQLを使用します。
 
 ---
 
