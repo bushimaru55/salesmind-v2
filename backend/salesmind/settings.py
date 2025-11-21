@@ -65,7 +65,7 @@ ROOT_URLCONF = "salesmind.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -83,7 +83,8 @@ WSGI_APPLICATION = "salesmind.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# 開発環境ではSQLiteを使用（環境変数USE_SQLITE=Trueの場合）
+# Docker環境ではPostgreSQLを使用（環境変数USE_SQLITE=Trueの場合のみSQLite）
+# デフォルトはPostgreSQL（Docker環境標準）
 USE_SQLITE = os.getenv("USE_SQLITE", "False") == "True"
 
 if USE_SQLITE:
@@ -106,6 +107,14 @@ else:
     }
 
 CORS_ALLOW_ALL_ORIGINS = True
+
+# CSRF設定（nginx経由のアクセスを許可）
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
 
 # REST Framework settings
 REST_FRAMEWORK = {

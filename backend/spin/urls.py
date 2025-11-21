@@ -17,5 +17,8 @@ urlpatterns = [
     path('company/scrape/', views.scrape_company, name='scrape_company'),
     path('company/scrape-from-sitemap/', views.scrape_from_sitemap, name='scrape_from_sitemap'),
     path('company/analyze/', views.analyze_company, name='analyze_company'),
+    # ランキング関連
+    path('ranking/simple/', views.get_simple_ranking, name='get_simple_ranking'),
+    path('ranking/detailed/', views.get_detailed_ranking, name='get_detailed_ranking'),
 ]
 

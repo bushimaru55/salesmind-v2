@@ -7,6 +7,9 @@ from django.utils import timezone
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
+from django.db.models import Avg, Max, Count, Q
+from django.db.models.functions import Coalesce
+from django.db import transaction
 import json
 import uuid
 import logging
@@ -264,7 +267,17 @@ def chat_session(request):
         current_spin_stage = None
         message_spin_type = None
         step_appropriateness = None
-        
+        stage_evaluation = 'unknown'
+        system_notes = None
+        stage_labels = {
+            'S': '状況確認',
+            'P': '課題顕在化',
+            'I': '示唆',
+            'N': '解決メリット',
+        }
+        stage_order = {'S': 0, 'P': 1, 'I': 2, 'N': 3}
+        current_stage_value = session.current_spin_stage or 'S'
+         
         if session.mode == 'detailed' and session.company:
             try:
                 # 営業メッセージを分析
@@ -275,6 +288,45 @@ def chat_session(request):
                 message_spin_type = analysis_result.get('message_spin_type')
                 step_appropriateness = analysis_result.get('step_appropriateness')
                 
+                adjusted_delta = success_delta
+                if message_spin_type in stage_order:
+                    diff = stage_order[message_spin_type] - stage_order.get(current_stage_value, 0)
+                    if diff == 0:
+                        stage_evaluation = 'repeat'
+                        adjusted_delta = max(min(success_delta, 1), -1)
+                    elif diff == 1:
+                        stage_evaluation = 'advance'
+                        adjusted_delta = max(success_delta, 2)
+                    elif diff > 1:
+                        stage_evaluation = 'jump'
+                        adjusted_delta = min(success_delta, -3)
+                    elif diff < 0:
+                        stage_evaluation = 'regression'
+                        adjusted_delta = min(success_delta, -2)
+                else:
+                    stage_evaluation = 'unknown'
+                    adjusted_delta = min(success_delta, 0)
+
+                adjusted_delta = max(-5, min(5, adjusted_delta))
+                success_delta = adjusted_delta
+                
+                if message_spin_type in stage_order:
+                    stage_name = stage_labels.get(message_spin_type, message_spin_type)
+                else:
+                    stage_name = '判定不能'
+                eval_map = {
+                    'advance': '段階が前進しました',
+                    'repeat': '同じ段階での深掘りです',
+                    'jump': '段階を飛び越えています',
+                    'regression': '段階が逆戻りしています',
+                    'unknown': '段階を判定できません',
+                }
+                system_notes = eval_map.get(stage_evaluation, '')
+                if analysis_reason:
+                    analysis_reason = f"{analysis_reason} / システム判定: {stage_name}・{system_notes}"
+                else:
+                    analysis_reason = f"システム判定: {stage_name}・{system_notes}"
+                
                 # 成功率を更新（0-100の範囲でクリップ）
                 new_probability = session.success_probability + success_delta
                 success_probability = max(0, min(100, new_probability))
@@ -282,6 +334,10 @@ def chat_session(request):
                 # セッションの成功率を更新
                 session.success_probability = success_probability
                 session.last_analysis_reason = analysis_reason
+                if message_spin_type in stage_order:
+                    # 段階が前進、または同段階であれば更新
+                    if stage_evaluation in ['advance', 'repeat']:
+                        session.current_spin_stage = message_spin_type
                 session.save()
                 
                 # 営業メッセージに分析結果を保存
@@ -291,21 +347,25 @@ def chat_session(request):
                     summary_lines.append(analysis_reason)
                 if step_appropriateness:
                     summary_lines.append(f"ステップ適切性: {step_appropriateness}")
-                if current_spin_stage:
-                    summary_lines.append(f"現在の段階: {current_spin_stage}")
                 if message_spin_type:
                     summary_lines.append(f"今回の発言: {message_spin_type}")
+                if stage_evaluation:
+                    summary_lines.append(f"段階評価: {stage_evaluation}")
                 salesperson_msg.analysis_summary = "\n".join(summary_lines) if summary_lines else None
+                salesperson_msg.spin_stage = message_spin_type if message_spin_type in stage_order else None
+                salesperson_msg.stage_evaluation = stage_evaluation
+                salesperson_msg.system_notes = system_notes
                 salesperson_msg.save()
                 
                 logger.info(
-                    "成功率更新: Session %s, Delta=%s, New=%s%%, stage=%s, message=%s, step=%s",
+                    "成功率更新: Session %s, Delta=%s, New=%s%%, stage=%s, message=%s, step=%s, eval=%s",
                     session.id,
                     success_delta,
                     success_probability,
                     current_spin_stage,
                     message_spin_type,
                     step_appropriateness,
+                    stage_evaluation,
                 )
             except Exception as e:
                 logger.warning(f"成功率分析に失敗しました: {e}", exc_info=True)
@@ -336,8 +396,12 @@ def chat_session(request):
             response_data["current_spin_stage"] = current_spin_stage
             response_data["message_spin_type"] = message_spin_type
             response_data["step_appropriateness"] = step_appropriateness
+            response_data["stage_evaluation"] = stage_evaluation
             if analysis_reason:
                 response_data["analysis_reason"] = analysis_reason
+            if system_notes:
+                response_data["system_notes"] = system_notes
+            response_data["session_spin_stage"] = session.current_spin_stage
         
         return Response(response_data, status=status.HTTP_200_OK)
     except Exception as e:
@@ -394,27 +458,42 @@ def finish_session(request):
         scoring_result = score_conversation(session, conversation_history)
         scores_data = json.loads(scoring_result)
         
-        # スコアリング結果を保存
-        report = Report.objects.create(
-            session=session,
-            spin_scores={
-                "situation": scores_data.get("situation", 0),
-                "problem": scores_data.get("problem", 0),
-                "implication": scores_data.get("implication", 0),
-                "need": scores_data.get("need", 0),
-                "total": scores_data.get("total", 0)
-            },
-            feedback=scores_data.get("feedback", ""),
-            next_actions=scores_data.get("next_actions", ""),
-            scoring_details=scores_data.get("scoring_details", {})
-        )
+        # トランザクション内でデータを確実に保存
+        with transaction.atomic():
+            # スコアリング結果を保存
+            report = Report.objects.create(
+                session=session,
+                spin_scores={
+                    "situation": scores_data.get("situation", 0),
+                    "problem": scores_data.get("problem", 0),
+                    "implication": scores_data.get("implication", 0),
+                    "need": scores_data.get("need", 0),
+                    "total": scores_data.get("total", 0)
+                },
+                feedback=scores_data.get("feedback", ""),
+                next_actions=scores_data.get("next_actions", ""),
+                scoring_details=scores_data.get("scoring_details", {})
+            )
+            
+            # セッションを終了状態に更新
+            session.status = 'finished'
+            session.finished_at = timezone.now()
+            session.save()
+            
+            logger.info(f"Session finished and scored: {session_id}, total_score: {report.spin_scores.get('total', 0)}, report_id: {report.id}")
         
-        # セッションを終了状態に更新
-        session.status = 'finished'
-        session.finished_at = timezone.now()
-        session.save()
+        # データが確実に保存されたことを確認
+        saved_report = Report.objects.get(id=report.id)
+        saved_session = Session.objects.get(id=session.id)
         
-        logger.info(f"Session finished and scored: {session_id}, total_score: {report.spin_scores.get('total', 0)}")
+        if saved_session.status != 'finished':
+            logger.error(f"Session status not saved correctly: {session_id}")
+            raise Exception("セッション状態の保存に失敗しました")
+        
+        if not saved_report:
+            logger.error(f"Report not saved correctly: {session_id}")
+            raise Exception("レポートの保存に失敗しました")
+        
         return Response({
             "session_id": str(session_id),
             "report_id": report.id,
@@ -720,5 +799,132 @@ def analyze_company(request):
         logger.error(f"予期しないエラー: {e}", exc_info=True)
         return Response({
             "error": "Internal server error",
+            "message": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_simple_ranking(request):
+    """簡易診断モードのランキングを取得するエンドポイント（認証不要）"""
+    try:
+        # 簡易診断モードで完了したセッションのみを対象
+        finished_sessions = Session.objects.filter(
+            mode='simple',
+            status='finished'
+        ).select_related('user', 'report').prefetch_related('messages')
+        
+        # レポートが存在するセッションのみを対象
+        sessions_with_reports = finished_sessions.filter(report__isnull=False)
+        
+        # セッションごとのランキングデータを構築
+        ranking_data = []
+        for session in sessions_with_reports:
+            report = session.report
+            total_score = report.spin_scores.get('total', 0)
+            message_count = session.messages.count()
+            
+            ranking_data.append({
+                'session_id': str(session.id),
+                'username': session.user.username,
+                'industry': session.industry,
+                'total_score': round(total_score, 1),
+                'situation_score': round(report.spin_scores.get('situation', 0), 1),
+                'problem_score': round(report.spin_scores.get('problem', 0), 1),
+                'implication_score': round(report.spin_scores.get('implication', 0), 1),
+                'need_score': round(report.spin_scores.get('need', 0), 1),
+                'message_count': message_count,
+                'finished_at': session.finished_at.isoformat() if session.finished_at else None,
+            })
+        
+        # 総合スコアでソート（降順）
+        ranking_data.sort(key=lambda x: x['total_score'], reverse=True)
+        
+        # 順位を追加
+        for i, entry in enumerate(ranking_data, 1):
+            entry['rank'] = i
+        
+        logger.info(f"簡易診断ランキング取得: {len(ranking_data)}件")
+        
+        return Response({
+            "mode": "simple",
+            "ranking": ranking_data,
+            "total_sessions": len(ranking_data)
+        }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        logger.error(f"ランキング取得エラー: {e}", exc_info=True)
+        return Response({
+            "error": "Failed to get ranking",
+            "message": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_detailed_ranking(request):
+    """詳細診断モードのランキングを取得するエンドポイント（認証不要）"""
+    try:
+        # 詳細診断モードで完了したセッションのみを対象
+        finished_sessions = Session.objects.filter(
+            mode='detailed',
+            status='finished'
+        ).select_related('user', 'report', 'company').prefetch_related('messages')
+        
+        # レポートが存在するセッションのみを対象
+        sessions_with_reports = finished_sessions.filter(report__isnull=False)
+        
+        # セッションごとのランキングデータを構築
+        ranking_data = []
+        for session in sessions_with_reports:
+            report = session.report
+            total_score = report.spin_scores.get('total', 0)
+            success_probability = session.success_probability
+            message_count = session.messages.count()
+            
+            # 総合評価スコア（スコア70% + 成功率30%）
+            composite_score = (total_score * 0.7) + (success_probability * 0.3)
+            
+            company_name = ''
+            if session.company:
+                company_name = session.company.company_name or ''
+            if not company_name:
+                company_name = session.industry or '未設定'
+            
+            ranking_data.append({
+                'session_id': str(session.id),
+                'username': session.user.username,
+                'company_name': company_name,
+                'industry': session.industry or '未設定',
+                'total_score': round(total_score, 1),
+                'success_probability': round(success_probability, 1),
+                'composite_score': round(composite_score, 1),
+                'situation_score': round(report.spin_scores.get('situation', 0), 1),
+                'problem_score': round(report.spin_scores.get('problem', 0), 1),
+                'implication_score': round(report.spin_scores.get('implication', 0), 1),
+                'need_score': round(report.spin_scores.get('need', 0), 1),
+                'message_count': message_count,
+                'finished_at': session.finished_at.isoformat() if session.finished_at else None,
+            })
+        
+        # 総合評価スコアでソート（降順）
+        ranking_data.sort(key=lambda x: x['composite_score'], reverse=True)
+        
+        # 順位を追加
+        for i, entry in enumerate(ranking_data, 1):
+            entry['rank'] = i
+        
+        logger.info(f"詳細診断ランキング取得: {len(ranking_data)}件")
+        
+        return Response({
+            "mode": "detailed",
+            "ranking": ranking_data,
+            "total_sessions": len(ranking_data)
+        }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        logger.error(f"ランキング取得エラー: {e}", exc_info=True)
+        return Response({
+            "error": "Failed to get ranking",
             "message": str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

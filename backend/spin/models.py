@@ -67,6 +67,13 @@ class Session(models.Model):
         ('simple', '簡易診断'),
         ('detailed', '詳細診断'),
     ]
+
+    SPIN_STAGE_CHOICES = [
+        ('S', '状況確認 (Situation)'),
+        ('P', '課題顕在化 (Problem)'),
+        ('I', '示唆 (Implication)'),
+        ('N', '解決メリット (Need-Payoff)'),
+    ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions')
@@ -79,6 +86,12 @@ class Session(models.Model):
     company_analysis = models.ForeignKey(CompanyAnalysis, on_delete=models.SET_NULL, null=True, blank=True, related_name='sessions', help_text="分析結果との関連付け")
     success_probability = models.IntegerField(default=50, help_text="現在の商談成功率 (0-100%)")
     last_analysis_reason = models.TextField(null=True, blank=True, help_text="直近の成功率変動理由")
+    current_spin_stage = models.CharField(
+        max_length=1,
+        choices=SPIN_STAGE_CHOICES,
+        default='S',
+        help_text="現在のSPIN段階（システム判定）"
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     started_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -97,6 +110,13 @@ class ChatMessage(models.Model):
         ('salesperson', '営業担当者'),
         ('customer', 'AI顧客'),
     ]
+    STAGE_EVALUATION_CHOICES = [
+        ('advance', '前進'),
+        ('repeat', '同段階の継続'),
+        ('regression', '逆戻り'),
+        ('jump', '段階飛び越し'),
+        ('unknown', '判定不能'),
+    ]
     
     id = models.BigAutoField(primary_key=True)
     session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='messages')
@@ -105,6 +125,21 @@ class ChatMessage(models.Model):
     sequence = models.PositiveIntegerField()
     success_delta = models.IntegerField(null=True, blank=True, help_text="この発言による成功率変動")
     analysis_summary = models.TextField(null=True, blank=True, help_text="成功率分析の概要")
+    spin_stage = models.CharField(
+        max_length=1,
+        choices=Session.SPIN_STAGE_CHOICES,
+        null=True,
+        blank=True,
+        help_text="SPIN段階（システム判定）"
+    )
+    stage_evaluation = models.CharField(
+        max_length=20,
+        choices=STAGE_EVALUATION_CHOICES,
+        null=True,
+        blank=True,
+        help_text="段階評価（前進/同段階/逆戻り/飛び越し/判定不能）"
+    )
+    system_notes = models.TextField(null=True, blank=True, help_text="システムによる補足メモ")
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:

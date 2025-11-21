@@ -43,8 +43,8 @@ class SpinGenerateSerializer(serializers.Serializer):
 class ChatMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatMessage
-        fields = ['id', 'role', 'message', 'sequence', 'created_at']
-        read_only_fields = ['id', 'sequence', 'created_at']
+        fields = ['id', 'role', 'message', 'sequence', 'created_at', 'success_delta', 'analysis_summary', 'spin_stage', 'stage_evaluation', 'system_notes']
+        read_only_fields = ['id', 'sequence', 'created_at', 'success_delta', 'analysis_summary', 'spin_stage', 'stage_evaluation', 'system_notes']
 
 
 class CompanySerializer(serializers.ModelSerializer):
@@ -66,8 +66,8 @@ class SessionSerializer(serializers.ModelSerializer):
         model = Session
         fields = ['id', 'user', 'mode', 'industry', 'value_proposition', 'customer_persona', 
                   'customer_pain', 'status', 'started_at', 'finished_at', 'created_at',
-                  'company_id', 'company', 'company_analysis', 'success_probability', 'last_analysis_reason']
-        read_only_fields = ['id', 'user', 'status', 'started_at', 'finished_at', 'created_at', 'company', 'company_analysis', 'success_probability', 'last_analysis_reason']
+                  'company_id', 'company', 'company_analysis', 'success_probability', 'last_analysis_reason', 'current_spin_stage']
+        read_only_fields = ['id', 'user', 'status', 'started_at', 'finished_at', 'created_at', 'company', 'company_analysis', 'success_probability', 'last_analysis_reason', 'current_spin_stage']
     
     def validate_industry(self, value):
         """業界のバリデーション（企業情報がある場合は空でもOK）"""
