@@ -26,6 +26,16 @@ from .serializers import (
     CompanyAnalyzeSerializer,
 )
 from .services.openai_client import generate_spin as generate_spin_questions, generate_customer_response
+from .services.closing_helper import (
+    should_trigger_closing, 
+    generate_closing_proposal, 
+    check_need_payoff_complete,
+    check_loss_candidate,
+    check_loss_confirmed,
+    generate_loss_response,
+    LOSS_REASONS
+)
+from .services.temperature_score import calculate_temperature_score
 from .services.scoring import score_conversation
 from .services.scraper import scrape_company_info, scrape_multiple_urls
 from .services.sitemap_parser import parse_sitemap_from_file, parse_sitemap_from_url, parse_sitemap_index
@@ -236,6 +246,16 @@ def chat_session(request):
         logger.warning(f"Session already finished: {session_id}")
         raise SessionFinishedError(f"セッションは既に終了しています: {session_id}")
     
+    # 無限ループ防止: 同じメッセージが連続しないようにチェック
+    last_message = session.messages.filter(role='salesperson').order_by('-sequence').first()
+    if last_message and last_message.message.strip() == message.strip():
+        return Response({
+            "error": "Validation failed",
+            "details": {
+                "message": ["同じメッセージを連続して送信することはできません"]
+            }
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
     # 営業担当者のメッセージを保存
     messages = session.messages.all()
     sequence = messages.count() + 1
@@ -252,12 +272,41 @@ def chat_session(request):
         conversation_history = list(messages) + [salesperson_msg]
         customer_response = generate_customer_response(session, conversation_history)
         
+        # クロージングスタイルを判定（営業メッセージから）
+        closing_style = None
+        message_lower = message.lower()
+        
+        # 選択肢型クロージング（例：「デモと無料体験、どちらで進めましょう？」）
+        option_keywords = ['どちら', 'どっち', 'どれ', 'どちらで', 'どちらが', 'どちらを']
+        if any(keyword in message_lower for keyword in option_keywords):
+            closing_style = "option_based"
+        # 一気に押すクロージング（例：「ぜひ導入してください」）
+        elif any(keyword in message_lower for keyword in ['ぜひ', '必ず', '絶対', '今すぐ', 'すぐに']):
+            closing_style = "one_shot_push"
+        
+        # 顧客温度スコアを計算（SPIN順序ペナルティは後で更新されるため、初期値は0）
+        temperature_result = calculate_temperature_score(
+            customer_response, 
+            use_llm=True,
+            spin_penalty=0.0,  # 後で更新される
+            closing_style=closing_style
+        )
+        
         # AI顧客のメッセージを保存
         customer_msg = ChatMessage.objects.create(
             session=session,
             role='customer',
             message=customer_response,
-            sequence=sequence + 1
+            sequence=sequence + 1,
+            temperature_score=temperature_result.get('temperature'),
+            temperature_details={
+                'sentiment': temperature_result.get('sentiment'),
+                'sentiment_score': temperature_result.get('sentiment_score'),
+                'buying_signal': temperature_result.get('buying_signal'),
+                'cognitive_load': temperature_result.get('cognitive_load'),
+                'engagement': temperature_result.get('engagement'),
+                'question_score': temperature_result.get('question_score'),
+            }
         )
         
         # 詳細診断モードかつ企業情報がある場合、成功率を分析・更新
@@ -288,7 +337,10 @@ def chat_session(request):
                 message_spin_type = analysis_result.get('message_spin_type')
                 step_appropriateness = analysis_result.get('step_appropriateness')
                 
+                # SPIN順序ペナルティの緩和ロジック
                 adjusted_delta = success_delta
+                spin_order_penalty = 0.0
+                
                 if message_spin_type in stage_order:
                     diff = stage_order[message_spin_type] - stage_order.get(current_stage_value, 0)
                     if diff == 0:
@@ -299,13 +351,29 @@ def chat_session(request):
                         adjusted_delta = max(success_delta, 2)
                     elif diff > 1:
                         stage_evaluation = 'jump'
-                        adjusted_delta = min(success_delta, -3)
+                        # 順序違反ペナルティを最大30%に制限
+                        original_penalty = min(success_delta, -3)
+                        spin_order_penalty = original_penalty * 0.3
+                        adjusted_delta = spin_order_penalty
                     elif diff < 0:
                         stage_evaluation = 'regression'
-                        adjusted_delta = min(success_delta, -2)
+                        # 順序違反ペナルティを最大30%に制限
+                        original_penalty = min(success_delta, -2)
+                        spin_order_penalty = original_penalty * 0.3
+                        adjusted_delta = spin_order_penalty
                 else:
                     stage_evaluation = 'unknown'
                     adjusted_delta = min(success_delta, 0)
+                
+                # 顧客の前向き反応があれば、順序ペナルティをさらに軽減（50%）
+                # 顧客メッセージから前向き反応をチェック
+                customer_response_lower = customer_response.lower()
+                positive_keywords = ['興味', '詳しく', 'デモ', '体験', '導入', '価値', '検討', 'メリット']
+                has_positive_response = any(keyword in customer_response_lower for keyword in positive_keywords)
+                
+                if has_positive_response and spin_order_penalty < 0:
+                    spin_order_penalty = spin_order_penalty * 0.5
+                    adjusted_delta = spin_order_penalty
 
                 adjusted_delta = max(-5, min(5, adjusted_delta))
                 success_delta = adjusted_delta
@@ -334,10 +402,37 @@ def chat_session(request):
                 # セッションの成功率を更新
                 session.success_probability = success_probability
                 session.last_analysis_reason = analysis_reason
+                
+                # SPIN段階の更新とconversation_phaseの更新
                 if message_spin_type in stage_order:
                     # 段階が前進、または同段階であれば更新
                     if stage_evaluation in ['advance', 'repeat']:
                         session.current_spin_stage = message_spin_type
+                        # conversation_phaseも更新
+                        phase_map = {
+                            'S': 'SPIN_S',
+                            'P': 'SPIN_P',
+                            'I': 'SPIN_I',
+                            'N': 'SPIN_N'
+                        }
+                        if message_spin_type in phase_map:
+                            session.conversation_phase = phase_map[message_spin_type]
+                
+                # 失注候補をチェック
+                updated_history = list(session.messages.all().order_by('sequence')) + [salesperson_msg]
+                loss_reason = check_loss_candidate(session, updated_history)
+                
+                if loss_reason:
+                    # 失注候補に遷移
+                    if session.conversation_phase != 'LOSS_CANDIDATE':
+                        session.conversation_phase = 'LOSS_CANDIDATE'
+                        session.loss_reason = loss_reason
+                        logger.info(f"失注候補に遷移: Session {session.id}, reason={loss_reason}")
+                elif should_trigger_closing(session, updated_history):
+                    # Need-Payoff完了をチェックしてCLOSING_READYに遷移
+                    session.conversation_phase = 'CLOSING_READY'
+                    logger.info(f"クロージング準備完了: Session {session.id}")
+                
                 session.save()
                 
                 # 営業メッセージに分析結果を保存
@@ -357,8 +452,49 @@ def chat_session(request):
                 salesperson_msg.system_notes = system_notes
                 salesperson_msg.save()
                 
+                # 温度スコアを再計算（SPIN順序ペナルティを含める）
+                # SPIN順序違反があった場合のペナルティを計算
+                spin_penalty_for_temp = 0.0
+                if stage_evaluation in ['jump', 'regression']:
+                    # 順序違反ペナルティを最大30%に制限
+                    if stage_evaluation == 'jump':
+                        original_penalty = -3.0
+                    else:  # regression
+                        original_penalty = -2.0
+                    spin_penalty_for_temp = original_penalty * 0.3
+                    
+                    # 顧客の前向き反応があれば、順序ペナルティをさらに軽減（50%）
+                    customer_response_lower = customer_response.lower()
+                    positive_keywords = ['興味', '詳しく', 'デモ', '体験', '導入', '価値', '検討', 'メリット']
+                    has_positive_response = any(keyword in customer_response_lower for keyword in positive_keywords)
+                    if has_positive_response:
+                        spin_penalty_for_temp = spin_penalty_for_temp * 0.5
+                
+                # 温度スコアを再計算
+                temperature_result = calculate_temperature_score(
+                    customer_response,
+                    use_llm=True,
+                    spin_penalty=spin_penalty_for_temp,
+                    closing_style=closing_style
+                )
+                
+                # 温度スコアを更新
+                customer_msg.temperature_score = temperature_result.get('temperature')
+                customer_msg.temperature_details = {
+                    'sentiment': temperature_result.get('sentiment'),
+                    'sentiment_score': temperature_result.get('sentiment_score'),
+                    'buying_signal': temperature_result.get('buying_signal'),
+                    'cognitive_load': temperature_result.get('cognitive_load'),
+                    'engagement': temperature_result.get('engagement'),
+                    'question_score': temperature_result.get('question_score'),
+                    'positive_response': temperature_result.get('positive_response'),
+                    'spin_penalty': temperature_result.get('spin_penalty'),
+                    'closing_bonus': temperature_result.get('closing_bonus'),
+                }
+                customer_msg.save()
+                
                 logger.info(
-                    "成功率更新: Session %s, Delta=%s, New=%s%%, stage=%s, message=%s, step=%s, eval=%s",
+                    "成功率更新: Session %s, Delta=%s, New=%s%%, stage=%s, message=%s, step=%s, eval=%s, temp=%s",
                     session.id,
                     success_delta,
                     success_probability,
@@ -366,28 +502,95 @@ def chat_session(request):
                     message_spin_type,
                     step_appropriateness,
                     stage_evaluation,
+                    temperature_result.get('temperature'),
                 )
             except Exception as e:
                 logger.warning(f"成功率分析に失敗しました: {e}", exc_info=True)
                 # 分析に失敗した場合は成功率は変更しない
                 success_probability = session.success_probability
         
+        # 失注確定のチェック
+        loss_response = None
+        updated_history_for_loss = list(session.messages.all().order_by('sequence'))
+        if session.conversation_phase == 'LOSS_CANDIDATE':
+            loss_reason = session.loss_reason or 'NO_URGENCY'
+            if check_loss_confirmed(session, updated_history_for_loss, loss_reason):
+                session.conversation_phase = 'LOSS_CONFIRMED'
+                session.save()
+                loss_response = generate_loss_response(loss_reason)
+                logger.info(f"失注確定: Session {session.id}, reason={loss_reason}")
+        
+        # クロージング提案の生成（CLOSING_READY状態の場合）
+        closing_proposal = None
+        if session.conversation_phase == 'CLOSING_READY' and not loss_response:
+            try:
+                updated_history = list(session.messages.all().order_by('sequence'))
+                closing_proposal = generate_closing_proposal(session, updated_history)
+                logger.info(f"クロージング提案を生成: Session {session.id}, type={closing_proposal.get('action_type')}")
+            except Exception as e:
+                logger.warning(f"クロージング提案生成に失敗: {e}", exc_info=True)
+        
+        # 無限ループ防止: 会話が長すぎる場合（25回以上）はクロージングまたは失注を強制
+        all_messages_count = session.messages.count()
+        if all_messages_count >= 25 and session.conversation_phase not in ['CLOSING_READY', 'CLOSING_ACTION', 'LOSS_CANDIDATE', 'LOSS_CONFIRMED']:
+            # 成功率が低い場合は失注、高い場合はクロージング
+            if session.success_probability <= 40:
+                session.conversation_phase = 'LOSS_CANDIDATE'
+                session.loss_reason = 'NO_URGENCY'
+                session.save()
+                logger.info(f"会話が長すぎるため失注候補に強制: Session {session.id}, メッセージ数={all_messages_count}")
+            else:
+                session.conversation_phase = 'CLOSING_READY'
+                session.save()
+                if not closing_proposal:
+                    closing_proposal = generate_closing_proposal(session, list(session.messages.all().order_by('sequence')))
+                logger.info(f"会話が長すぎるためクロージングを強制: Session {session.id}, メッセージ数={all_messages_count}")
+        
         # 最新の会話履歴を取得
         all_messages = list(session.messages.all().order_by('sequence'))
-        conversation = [
-            {
+        conversation = []
+        temperature_history = []  # 温度スコアの履歴
+        
+        for msg in all_messages:
+            msg_data = {
                 "role": msg.role,
                 "message": msg.message,
                 "created_at": msg.created_at.isoformat()
             }
-            for msg in all_messages
-        ]
+            
+            # 顧客メッセージの場合、温度スコアを追加
+            if msg.role == 'customer' and msg.temperature_score is not None:
+                msg_data["temperature_score"] = msg.temperature_score
+                msg_data["temperature_details"] = msg.temperature_details or {}
+                temperature_history.append({
+                    "sequence": msg.sequence,
+                    "temperature": msg.temperature_score,
+                    "created_at": msg.created_at.isoformat()
+                })
+            
+            conversation.append(msg_data)
         
         # レスポンスデータを構築
         response_data = {
             "session_id": str(session_id),
-            "conversation": conversation
+            "conversation": conversation,
+            "conversation_phase": session.conversation_phase,
+            "temperature_history": temperature_history,
         }
+        
+        # 最新の温度スコアを追加
+        if customer_msg.temperature_score is not None:
+            response_data["current_temperature"] = customer_msg.temperature_score
+            response_data["temperature_details"] = customer_msg.temperature_details or {}
+        
+        # 失注確定の場合、失注情報を追加
+        if loss_response:
+            response_data["loss_response"] = loss_response
+            response_data["should_end_session"] = True  # セッション終了を促すフラグ
+        
+        # クロージング提案がある場合は追加
+        if closing_proposal:
+            response_data["closing_proposal"] = closing_proposal
         
         # 詳細診断モードの場合、成功率情報を追加
         if session.mode == 'detailed':
@@ -460,16 +663,27 @@ def finish_session(request):
         
         # トランザクション内でデータを確実に保存
         with transaction.atomic():
+            # 新しい5要素スコアリングに対応
+            # 後方互換性のため、SPIN要素も含める
+            spin_scores = {
+                "total": scores_data.get("total", 0),
+                # 新しい5要素スコア
+                "exploration": scores_data.get("exploration", 0),
+                "implication": scores_data.get("implication", 0),
+                "value_proposition": scores_data.get("value_proposition", 0),
+                "customer_response": scores_data.get("customer_response", 0),
+                "advancement": scores_data.get("advancement", 0),
+                # 後方互換性のためSPIN要素も含める
+                "situation": scores_data.get("situation", scores_data.get("exploration", 0) // 2),
+                "problem": scores_data.get("problem", scores_data.get("exploration", 0) // 2),
+                "implication_legacy": scores_data.get("implication", 0),
+                "need": scores_data.get("need", scores_data.get("value_proposition", 0))
+            }
+            
             # スコアリング結果を保存
             report = Report.objects.create(
                 session=session,
-                spin_scores={
-                    "situation": scores_data.get("situation", 0),
-                    "problem": scores_data.get("problem", 0),
-                    "implication": scores_data.get("implication", 0),
-                    "need": scores_data.get("need", 0),
-                    "total": scores_data.get("total", 0)
-                },
+                spin_scores=spin_scores,
                 feedback=scores_data.get("feedback", ""),
                 next_actions=scores_data.get("next_actions", ""),
                 scoring_details=scores_data.get("scoring_details", {})

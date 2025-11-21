@@ -75,6 +75,17 @@ class Session(models.Model):
         ('N', '解決メリット (Need-Payoff)'),
     ]
     
+    CONVERSATION_PHASE_CHOICES = [
+        ('SPIN_S', 'SPIN - 状況確認'),
+        ('SPIN_P', 'SPIN - 課題顕在化'),
+        ('SPIN_I', 'SPIN - 示唆'),
+        ('SPIN_N', 'SPIN - 解決メリット'),
+        ('CLOSING_READY', 'クロージング準備完了'),
+        ('CLOSING_ACTION', 'クロージング実行中'),
+        ('LOSS_CANDIDATE', '失注候補'),
+        ('LOSS_CONFIRMED', '失注確定'),
+    ]
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions')
     mode = models.CharField(max_length=20, choices=MODE_CHOICES, default='simple', help_text="診断モード（簡易診断または詳細診断）")
@@ -91,6 +102,18 @@ class Session(models.Model):
         choices=SPIN_STAGE_CHOICES,
         default='S',
         help_text="現在のSPIN段階（システム判定）"
+    )
+    conversation_phase = models.CharField(
+        max_length=20,
+        choices=CONVERSATION_PHASE_CHOICES,
+        default='SPIN_S',
+        help_text="会話フェーズ（SPIN段階、クロージング段階、または失注段階）"
+    )
+    loss_reason = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="失注理由（予算不足、タイミング、必要性など）"
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     started_at = models.DateTimeField(auto_now_add=True)
@@ -140,6 +163,22 @@ class ChatMessage(models.Model):
         help_text="段階評価（前進/同段階/逆戻り/飛び越し/判定不能）"
     )
     system_notes = models.TextField(null=True, blank=True, help_text="システムによる補足メモ")
+    closing_action = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="クロージング提案の種類（見積/デモ/資料/日程調整）"
+    )
+    temperature_score = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="顧客温度スコア（0〜100）"
+    )
+    temperature_details = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="温度スコアの詳細情報（sentiment, buying_signal, cognitive_load, engagement, question_score）"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
