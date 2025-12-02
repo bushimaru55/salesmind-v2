@@ -271,10 +271,12 @@ class OpenAIAPIKeyAdmin(admin.ModelAdmin):
     """OpenAI APIキー管理画面"""
     
     # 一覧表示
-    list_display = ['status_icon', 'name', 'purpose', 'masked_key_display', 'is_default', 'is_active', 'created_at', 'updated_at']
+    list_display = ['name', 'purpose', 'masked_key_display', 'is_default', 'is_active', 'status_icon', 'created_at', 'updated_at', 'edit_link']
     list_filter = ['purpose', 'is_active', 'is_default', 'created_at']
     search_fields = ['name', 'description']
     ordering = ['-is_default', '-is_active', '-created_at']
+    list_editable = ['is_default', 'is_active']  # 一覧画面で直接編集可能
+    actions = ['activate_keys', 'deactivate_keys', 'duplicate_key']  # カスタムアクション
     
     # 詳細ページのフィールドセット
     fieldsets = (
@@ -351,6 +353,14 @@ class OpenAIAPIKeyAdmin(admin.ModelAdmin):
         
         return form
     
+    def edit_link(self, obj):
+        """編集リンク"""
+        from django.urls import reverse
+        from django.utils.safestring import mark_safe
+        url = reverse('admin:spin_openaiapikey_change', args=[obj.id])
+        return mark_safe(f'<a href="{url}" style="color: #417690; text-decoration: none;">✎ 編集</a>')
+    edit_link.short_description = '操作'
+    
     def save_model(self, request, obj, form, change):
         """保存時の処理"""
         super().save_model(request, obj, form, change)
@@ -360,4 +370,48 @@ class OpenAIAPIKeyAdmin(admin.ModelAdmin):
             self.message_user(request, f'APIキー "{obj.name}" を更新しました。', level='success')
         else:
             self.message_user(request, f'APIキー "{obj.name}" を登録しました。', level='success')
+    
+    def delete_model(self, request, obj):
+        """削除時の処理"""
+        key_name = obj.name
+        purpose = obj.get_purpose_display()
+        super().delete_model(request, obj)
+        self.message_user(request, f'APIキー "{key_name}" ({purpose}) を削除しました。', level='warning')
+    
+    def delete_queryset(self, request, queryset):
+        """一括削除時の処理"""
+        count = queryset.count()
+        super().delete_queryset(request, queryset)
+        self.message_user(request, f'{count}個のAPIキーを削除しました。', level='warning')
+    
+    # カスタムアクション
+    @admin.action(description='選択したAPIキーを有効化')
+    def activate_keys(self, request, queryset):
+        """選択したAPIキーを有効化"""
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'{updated}個のAPIキーを有効化しました。', level='success')
+    
+    @admin.action(description='選択したAPIキーを無効化')
+    def deactivate_keys(self, request, queryset):
+        """選択したAPIキーを無効化"""
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'{updated}個のAPIキーを無効化しました。', level='success')
+    
+    @admin.action(description='選択したAPIキーを複製')
+    def duplicate_key(self, request, queryset):
+        """選択したAPIキーを複製"""
+        if queryset.count() > 1:
+            self.message_user(request, '複製は1つずつ行ってください。', level='error')
+            return
+        
+        original = queryset.first()
+        duplicate = OpenAIAPIKey.objects.create(
+            name=f"{original.name} (コピー)",
+            api_key=original.api_key,
+            purpose=original.purpose,
+            is_active=False,  # 複製したキーは無効状態で作成
+            is_default=False,
+            description=f"[複製] {original.description or ''}"
+        )
+        self.message_user(request, f'APIキー "{duplicate.name}" を複製しました。（無効状態）', level='success')
 
