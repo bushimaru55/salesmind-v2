@@ -183,9 +183,10 @@ async function register() {
             
             // ログイン状態にする
             document.getElementById('loginForm').style.display = 'none';
-            document.getElementById('registerForm').style.display = 'none';
-            document.getElementById('userInfo').style.display = 'block';
-            document.getElementById('usernameDisplay').textContent = data.user.username;
+            
+            // ログイン状態にする
+            closeAuthModal();
+            checkAuth();
         } else {
             // エラー表示
             let errorMsg = 'ユーザー登録に失敗しました';
@@ -249,9 +250,10 @@ async function login() {
             
             showSuccess('ログインに成功しました');
             
+            
             // ログイン状態にする
-            document.getElementById('loginForm').style.display = 'none';
-            document.getElementById('registerForm').style.display = 'none';
+            closeAuthModal();
+            checkAuth();
             document.getElementById('userInfo').style.display = 'block';
             document.getElementById('usernameDisplay').textContent = data.user.username;
         } else {
@@ -1989,3 +1991,51 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+
+// モーダル関連の関数
+function showLoginModal() {
+    document.getElementById('authModal').style.display = 'flex';
+    showLoginTab();
+}
+
+function showRegisterModal() {
+    document.getElementById('authModal').style.display = 'flex';
+    showRegisterTab();
+}
+
+function closeAuthModal() {
+    document.getElementById('authModal').style.display = 'none';
+}
+
+// 既存のcheckAuth関数を更新（ヘッダーのユーザー情報表示）
+const originalCheckAuth = checkAuth;
+checkAuth = function() {
+    originalCheckAuth.call(this);
+    
+    const headerUserInfo = document.getElementById('headerUserInfo');
+    const headerAuthButtons = document.getElementById('headerAuthButtons');
+    const headerUsernameDisplay = document.getElementById('headerUsernameDisplay');
+    
+    if (authToken) {
+        const username = localStorage.getItem('username');
+        if (headerUsernameDisplay && username) {
+            headerUsernameDisplay.textContent = username;
+        }
+        if (headerUserInfo) headerUserInfo.style.display = 'flex';
+        if (headerAuthButtons) headerAuthButtons.style.display = 'none';
+    } else {
+        if (headerUserInfo) headerUserInfo.style.display = 'none';
+        if (headerAuthButtons) headerAuthButtons.style.display = 'flex';
+    }
+};
+
+// ログイン成功時にモーダルを閉じる
+const originalHandleLoginSuccess = function(data) {
+    authToken = data.token;
+    localStorage.setItem('authToken', authToken);
+    localStorage.setItem('username', data.user.username);
+    
+    closeAuthModal();
+    checkAuth();
+    initMode();
+};

@@ -12,9 +12,29 @@
     <div class="container">
         <!-- ヘッダー -->
         <header class="header">
-            <h1>🧠 SalesMind</h1>
-            <p class="subtitle">AI営業思考トレーナー - SPINメソッドで商談スキルを向上</p>
-            <div class="auth-section">
+            <div class="header-left">
+                <div class="logo">
+                    <span class="logo-icon">🧠</span>
+                    <span class="logo-text">SalesMind</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div id="headerUserInfo" class="header-user-info" style="display: none;">
+                    <span class="user-name" id="headerUsernameDisplay"></span>
+                    <button onclick="logout()" class="btn-logout">ログアウト</button>
+                </div>
+                <div id="headerAuthButtons" class="header-auth-buttons">
+                    <button onclick="showLoginModal()" class="btn-login">ログイン</button>
+                    <button onclick="showRegisterModal()" class="btn-register">新規登録</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- ログイン・登録モーダル -->
+        <div id="authModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <span class="modal-close" onclick="closeAuthModal()">&times;</span>
+                <h2 id="modalTitle">ログイン</h2>
                 <div id="authTabs" class="auth-tabs">
                     <button class="tab-button active" onclick="showLoginTab()">ログイン</button>
                     <button class="tab-button" onclick="showRegisterTab()">新規登録</button>
@@ -23,7 +43,7 @@
                     <form onsubmit="event.preventDefault(); login(); return false;" autocomplete="on">
                         <input type="text" id="loginUsername" name="username" placeholder="ユーザー名" autocomplete="username">
                         <input type="password" id="loginPassword" name="password" placeholder="パスワード" autocomplete="current-password">
-                        <button type="submit">→</button>
+                        <button type="submit" class="btn-primary">ログイン</button>
                     </form>
                     <div id="loginError" class="error-message" style="display: none;"></div>
                 </div>
@@ -32,16 +52,12 @@
                         <input type="text" id="registerUsername" name="username" placeholder="ユーザー名（3文字以上）" autocomplete="username">
                         <input type="email" id="registerEmail" name="email" placeholder="メールアドレス（オプション）" autocomplete="email">
                         <input type="password" id="registerPassword" name="password" placeholder="パスワード（6文字以上）" autocomplete="new-password">
-                        <button type="submit">→</button>
+                        <button type="submit" class="btn-primary">登録</button>
                     </form>
                     <div id="registerError" class="error-message" style="display: none;"></div>
                 </div>
-                <div id="userInfo" class="user-info" style="display: none;">
-                    <span>ようこそ、<strong id="usernameDisplay"></strong>さん</span>
-                    <button onclick="logout()">ログアウト</button>
-                </div>
             </div>
-        </header>
+        </div>
 
         <!-- メインコンテンツ -->
         <main class="main-content">
@@ -142,51 +158,59 @@
 
             <!-- ステップ3: チャット（AI顧客との対話） -->
             <section id="step3" class="step-section" style="display: none;">
-                <div class="step-header">
-                    <h2>ステップ3: AI顧客との対話</h2>
-                    <button onclick="returnToModeSelection()" class="btn-back-to-mode">← モード選択に戻る</button>
-                </div>
-                <div class="chat-container">
-                    <!-- 企業概要がここに表示される（詳細診断モード用） -->
-                    <div id="companySummary" class="company-summary" style="display: none;"></div>
-                    
-                    <!-- 商談成功率パネル（詳細診断モード用） -->
-                    <div id="successMeter" class="success-meter" style="display: none;">
-                        <div class="success-meter-header">
-                            <h3>📊 商談成功率</h3>
+                <div class="chat-two-column">
+                    <!-- 左カラム：チャット -->
+                    <div class="chat-left-column">
+                        <div class="chat-header">
+                            <h3>💬 チャット</h3>
                         </div>
-                        <div class="success-meter-content">
-                            <div class="success-probability-display">
-                                <span class="success-probability-value" id="successProbabilityValue">50</span>
-                                <span class="success-probability-unit">%</span>
-                            </div>
-                            <div class="success-delta-display" id="successDeltaDisplay" style="display: none;">
-                                <span class="success-delta-value" id="successDeltaValue">+0</span>
-                                <span class="success-delta-unit">%</span>
-                            </div>
-                            <div class="success-reason-display" id="successReasonDisplay" style="display: none;">
-                                <p class="success-reason-text" id="successReasonText"></p>
-                            </div>
-                            <div class="success-spin-meta" id="successSpinMeta" style="display: none;">
-                                <p class="success-spin-item" id="successSpinStage"></p>
-                                <p class="success-spin-item" id="successSpinMessage"></p>
-                                <p class="success-spin-item" id="successSpinAppropriateness"></p>
-                                <p class="success-spin-item" id="successSpinEvaluation"></p>
-                                <p class="success-spin-item" id="successSpinSessionStage"></p>
-                            </div>
-                            <div class="success-system-notes" id="successSystemNotes" style="display: none;"></div>
+                        <div id="chatMessages" class="chat-messages">
+                            <!-- メッセージがここに表示される -->
+                        </div>
+                        <div class="chat-input-area">
+                            <input type="text" id="chatMessageInput" placeholder="営業担当者の質問を入力..." onkeypress="handleChatKeyPress(event)">
+                            <button onclick="sendChatMessage()" class="btn-primary">送信</button>
                         </div>
                     </div>
-                    
-                    <div id="chatMessages" class="chat-messages">
-                        <!-- メッセージがここに表示される -->
-                    </div>
-                    <div class="chat-input-area">
-                        <input type="text" id="chatMessageInput" placeholder="営業担当者の質問を入力..." onkeypress="handleChatKeyPress(event)">
-                        <button onclick="sendChatMessage()" class="btn-primary">送信</button>
-                    </div>
-                    <div class="chat-actions">
-                        <button onclick="finishSession()" class="btn-secondary">セッションを終了してスコアリング</button>
+
+                    <!-- 右カラム：進捗状況と評価 -->
+                    <div class="chat-right-column">
+                        <!-- 企業概要（詳細診断モード用） -->
+                        <div id="companySummary" class="company-summary-sidebar" style="display: none;"></div>
+                        
+                        <!-- 商談成功率パネル（詳細診断モード用） -->
+                        <div id="successMeter" class="success-meter-sidebar" style="display: none;">
+                            <div class="success-meter-header">
+                                <h3>📊 商談成功率</h3>
+                            </div>
+                            <div class="success-meter-content">
+                                <div class="success-probability-display">
+                                    <span class="success-probability-value" id="successProbabilityValue">50</span>
+                                    <span class="success-probability-unit">%</span>
+                                </div>
+                                <div class="success-delta-display" id="successDeltaDisplay" style="display: none;">
+                                    <span class="success-delta-value" id="successDeltaValue">+0</span>
+                                    <span class="success-delta-unit">%</span>
+                                </div>
+                                <div class="success-reason-display" id="successReasonDisplay" style="display: none;">
+                                    <p class="success-reason-text" id="successReasonText"></p>
+                                </div>
+                                <div class="success-spin-meta" id="successSpinMeta" style="display: none;">
+                                    <p class="success-spin-item" id="successSpinStage"></p>
+                                    <p class="success-spin-item" id="successSpinMessage"></p>
+                                    <p class="success-spin-item" id="successSpinAppropriateness"></p>
+                                    <p class="success-spin-item" id="successSpinEvaluation"></p>
+                                    <p class="success-spin-item" id="successSpinSessionStage"></p>
+                                </div>
+                                <div class="success-system-notes" id="successSystemNotes" style="display: none;"></div>
+                            </div>
+                        </div>
+
+                        <!-- アクションボタン -->
+                        <div class="chat-actions-sidebar">
+                            <button onclick="finishSession()" class="btn-secondary btn-block">セッションを終了してスコアリング</button>
+                            <button onclick="returnToModeSelection()" class="btn-back-to-mode btn-block">← モード選択に戻る</button>
+                        </div>
                     </div>
                 </div>
             </section>
