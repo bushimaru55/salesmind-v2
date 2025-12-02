@@ -4,10 +4,20 @@ import os
 from typing import Dict, List
 
 from openai import OpenAI
+from ..utils import get_openai_api_key
 
 
 logger = logging.getLogger(__name__)
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+def get_client():
+    """OpenAIクライアントを取得（会話分析用）"""
+    try:
+        api_key = get_openai_api_key(purpose='chat')
+        return OpenAI(api_key=api_key)
+    except Exception as e:
+        logger.error(f"OpenAIクライアント取得エラー: Error: {str(e)}")
+        return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 def _format_conversation(messages: List[Dict[str, str]], limit: int = 10) -> str:
@@ -165,6 +175,7 @@ success_deltaは-5〜5の整数で、プラスは成功率を上げる要素、�
 """
 
     try:
+        client = get_client()
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[

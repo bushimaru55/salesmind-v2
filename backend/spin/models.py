@@ -3,6 +3,59 @@ from django.contrib.auth.models import User
 import uuid
 
 
+class OpenAIAPIKey(models.Model):
+    """OpenAI APIキー管理モデル"""
+    PURPOSE_CHOICES = [
+        ('spin_generation', 'SPIN質問生成'),
+        ('chat', 'チャット（顧客役）'),
+        ('scoring', 'スコアリング'),
+        ('scraping_analysis', 'スクレイピング分析'),
+        ('general', '汎用'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200, help_text="キーの識別名（例: 本番用、テスト用）")
+    api_key = models.CharField(max_length=500, help_text="OpenAI APIキー")
+    purpose = models.CharField(
+        max_length=50, 
+        choices=PURPOSE_CHOICES, 
+        default='general',
+        help_text="APIキーの用途"
+    )
+    is_active = models.BooleanField(default=True, help_text="有効/無効")
+    is_default = models.BooleanField(default=False, help_text="デフォルトキー")
+    description = models.TextField(blank=True, null=True, help_text="キーの説明")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-is_default', '-is_active', '-created_at']
+        verbose_name = 'OpenAI APIキー'
+        verbose_name_plural = 'OpenAI APIキー'
+    
+    def __str__(self):
+        status = "✓" if self.is_active else "✗"
+        default = " [デフォルト]" if self.is_default else ""
+        return f"{status} {self.name} ({self.get_purpose_display()}){default}"
+    
+    def get_masked_key(self):
+        """APIキーをマスキングして返す"""
+        if not self.api_key:
+            return ""
+        if len(self.api_key) <= 12:
+            return "sk-" + "*" * 8
+        return self.api_key[:7] + "..." + self.api_key[-4:]
+    
+    def save(self, *args, **kwargs):
+        # デフォルトキーが複数存在しないようにする
+        if self.is_default:
+            OpenAIAPIKey.objects.filter(
+                purpose=self.purpose, 
+                is_default=True
+            ).exclude(id=self.id).update(is_default=False)
+        super().save(*args, **kwargs)
+
+
 class Company(models.Model):
     """企業情報モデル"""
     SCRAPE_SOURCE_CHOICES = [

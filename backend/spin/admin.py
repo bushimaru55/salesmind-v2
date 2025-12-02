@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.utils.html import format_html
-from .models import Session, ChatMessage, Report
+from .models import Session, ChatMessage, Report, OpenAIAPIKey
 
 
 # Django標準のUserモデルを一旦登録解除
@@ -264,4 +264,100 @@ class ReportAdmin(admin.ModelAdmin):
         html += "</div>"
         return format_html(html)
     scoring_details_display.short_description = 'スコアリング詳細'
+
+
+@admin.register(OpenAIAPIKey)
+class OpenAIAPIKeyAdmin(admin.ModelAdmin):
+    """OpenAI APIキー管理画面"""
+    
+    # 一覧表示
+    list_display = ['status_icon', 'name', 'purpose', 'masked_key_display', 'is_default', 'is_active', 'created_at', 'updated_at']
+    list_filter = ['purpose', 'is_active', 'is_default', 'created_at']
+    search_fields = ['name', 'description']
+    ordering = ['-is_default', '-is_active', '-created_at']
+    
+    # 詳細ページのフィールドセット
+    fieldsets = (
+        ('基本情報', {
+            'fields': ('name', 'purpose', 'description')
+        }),
+        ('APIキー', {
+            'fields': ('api_key',),
+            'description': '⚠️ APIキーは慎重に扱ってください。外部に漏らさないよう注意してください。'
+        }),
+        ('設定', {
+            'fields': ('is_active', 'is_default')
+        }),
+        ('日時情報', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    readonly_fields = ['created_at', 'updated_at']
+    
+    # 新規作成時のフィールドセット
+    add_fieldsets = (
+        ('基本情報', {
+            'fields': ('name', 'purpose', 'description')
+        }),
+        ('APIキー', {
+            'fields': ('api_key',),
+        }),
+        ('設定', {
+            'fields': ('is_active', 'is_default')
+        }),
+    )
+    
+    def status_icon(self, obj):
+        """ステータスアイコン"""
+        if obj.is_active:
+            color = 'green'
+            icon = '✓'
+            text = '有効'
+        else:
+            color = 'red'
+            icon = '✗'
+            text = '無効'
+        
+        return format_html(
+            '<span style="color: {}; font-weight: bold; font-size: 1.2em;">{}</span> {}',
+            color, icon, text
+        )
+    status_icon.short_description = 'ステータス'
+    
+    def masked_key_display(self, obj):
+        """マスキングされたAPIキー"""
+        masked = obj.get_masked_key()
+        return format_html(
+            '<code style="background: #f5f5f5; padding: 4px 8px; border-radius: 3px; font-family: monospace;">{}</code>',
+            masked
+        )
+    masked_key_display.short_description = 'APIキー'
+    
+    def get_form(self, request, obj=None, **kwargs):
+        """フォームをカスタマイズ"""
+        form = super().get_form(request, obj, **kwargs)
+        
+        # ヘルプテキストをカスタマイズ
+        if 'api_key' in form.base_fields:
+            form.base_fields['api_key'].widget.attrs.update({
+                'style': 'width: 100%; font-family: monospace;',
+                'placeholder': 'sk-proj-...'
+            })
+        
+        if 'is_default' in form.base_fields:
+            form.base_fields['is_default'].help_text = '✓ 同じ用途のデフォルトキーは1つのみ。チェックすると他のキーのデフォルト設定が解除されます。'
+        
+        return form
+    
+    def save_model(self, request, obj, form, change):
+        """保存時の処理"""
+        super().save_model(request, obj, form, change)
+        
+        # 保存成功メッセージ
+        if change:
+            self.message_user(request, f'APIキー "{obj.name}" を更新しました。', level='success')
+        else:
+            self.message_user(request, f'APIキー "{obj.name}" を登録しました。', level='success')
 

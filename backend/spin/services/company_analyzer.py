@@ -7,9 +7,19 @@ import os
 import json
 from openai import OpenAI
 from typing import Dict, Any
+from ..utils import get_openai_api_key
 
 logger = logging.getLogger(__name__)
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+def get_client():
+    """OpenAIクライアントを取得（スクレイピング分析用）"""
+    try:
+        api_key = get_openai_api_key(purpose='scraping_analysis')
+        return OpenAI(api_key=api_key)
+    except Exception as e:
+        logger.error(f"OpenAIクライアント取得エラー: Error: {str(e)}")
+        return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 def analyze_spin_suitability(company_info: Dict[str, Any], value_proposition: str) -> Dict[str, Any]:
@@ -94,6 +104,7 @@ def analyze_spin_suitability(company_info: Dict[str, Any], value_proposition: st
 """
     
     try:
+        client = get_client()
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[

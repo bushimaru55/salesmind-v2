@@ -1,9 +1,36 @@
 import os
 import logging
 from openai import OpenAI
+from ..utils import get_openai_api_key
 
 logger = logging.getLogger(__name__)
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# 遅延初期化のためにclientをグローバル変数として定義
+_client = None
+
+
+def get_client(purpose='general'):
+    """
+    OpenAIクライアントを取得（用途別APIキー対応）
+    
+    Args:
+        purpose (str): APIキーの用途
+            - 'spin_generation': SPIN質問生成
+            - 'chat': チャット（顧客役）
+            - 'scoring': スコアリング
+            - 'scraping_analysis': スクレイピング分析
+            - 'general': 汎用
+    
+    Returns:
+        OpenAI: OpenAIクライアント
+    """
+    try:
+        api_key = get_openai_api_key(purpose=purpose)
+        return OpenAI(api_key=api_key)
+    except Exception as e:
+        logger.error(f"OpenAIクライアント取得エラー: purpose={purpose}, Error: {str(e)}")
+        # フォールバック: 環境変数から取得
+        return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 def generate_customer_response(session, conversation_history):
@@ -250,6 +277,7 @@ def generate_customer_response(session, conversation_history):
             messages.append({"role": "assistant", "content": msg.message})
     
     try:
+        client = get_client(purpose='chat')
         res = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
@@ -290,6 +318,7 @@ SPIN各要素（Situation, Problem, Implication, Need）ごとに、実際の商
 }
 """
     try:
+        client = get_client(purpose='spin_generation')
         res = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
