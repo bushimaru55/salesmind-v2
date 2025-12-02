@@ -125,29 +125,29 @@ body {
 .header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 30px;
+    padding: 20px 30px;
     text-align: center;
 }
 
 .header h1 {
-    font-size: 2.5em;
-    margin-bottom: 10px;
+    font-size: 2em;
+    margin-bottom: 5px;
 }
 
 .subtitle {
-    font-size: 1.1em;
+    font-size: 0.95em;
     opacity: 0.9;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
 }
 
 .auth-section {
-    margin-top: 20px;
+    margin-top: 10px;
 }
 
 .auth-tabs {
     display: flex;
     gap: 10px;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
     justify-content: center;
 }
 
@@ -174,7 +174,7 @@ body {
 .auth-form {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     max-width: 300px;
     margin: 0 auto;
 }
@@ -182,7 +182,7 @@ body {
 .auth-form form {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
 }
 
 .auth-form input {
@@ -198,22 +198,25 @@ body {
     color: #667eea;
     border: none;
     border-radius: 5px;
+    font-size: 1.5em;
     font-weight: bold;
     cursor: pointer;
     transition: all 0.3s;
+    min-width: 50px;
 }
 
 .auth-form button:hover {
     background: #f0f0f0;
     transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
 }
 
 .user-info {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 15px;
-    padding: 10px;
+    gap: 12px;
+    padding: 8px 15px;
     background: rgba(255, 255, 255, 0.2);
     border-radius: 5px;
 }
@@ -372,10 +375,11 @@ body {
 
 .error-message {
     color: #dc3545;
-    margin-top: 10px;
-    padding: 10px;
+    margin-top: 5px;
+    padding: 8px 10px;
     background: #f8d7da;
     border-radius: 5px;
+    font-size: 0.9em;
 }
 
 .success-message {
@@ -1207,6 +1211,25 @@ body {
     
     .success-reason-text {
         font-size: 0.85em;
+    }
+    
+    /* ヘッダーのモバイル対応 */
+    .header {
+        padding: 15px 20px;
+    }
+    
+    .header h1 {
+        font-size: 1.5em;
+        margin-bottom: 3px;
+    }
+    
+    .subtitle {
+        font-size: 0.85em;
+        margin-bottom: 10px;
+    }
+    
+    .auth-section {
+        margin-top: 8px;
     }
 }
 

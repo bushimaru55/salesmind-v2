@@ -18,21 +18,19 @@
                     <button class="tab-button" onclick="showRegisterTab()">新規登録</button>
                 </div>
                 <div id="loginForm" class="auth-form">
-                    <h3>ログイン</h3>
                     <form onsubmit="event.preventDefault(); login(); return false;" autocomplete="on">
                         <input type="text" id="loginUsername" name="username" placeholder="ユーザー名" autocomplete="username">
                         <input type="password" id="loginPassword" name="password" placeholder="パスワード" autocomplete="current-password">
-                        <button type="submit">ログイン</button>
+                        <button type="submit">→</button>
                     </form>
                     <div id="loginError" class="error-message" style="display: none;"></div>
                 </div>
                 <div id="registerForm" class="auth-form" style="display: none;">
-                    <h3>新規登録</h3>
                     <form onsubmit="event.preventDefault(); register(); return false;" autocomplete="on">
                         <input type="text" id="registerUsername" name="username" placeholder="ユーザー名（3文字以上）" autocomplete="username">
                         <input type="email" id="registerEmail" name="email" placeholder="メールアドレス（オプション）" autocomplete="email">
                         <input type="password" id="registerPassword" name="password" placeholder="パスワード（6文字以上）" autocomplete="new-password">
-                        <button type="submit">登録</button>
+                        <button type="submit">→</button>
                     </form>
                     <div id="registerError" class="error-message" style="display: none;"></div>
                 </div>
