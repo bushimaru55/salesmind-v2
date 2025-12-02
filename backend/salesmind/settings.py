@@ -120,7 +120,7 @@ CSRF_TRUSTED_ORIGINS = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+        'spin.authentication.CsrfExemptSessionAuthentication',  # CSRF検証を無効化したSessionAuthentication
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -131,20 +131,27 @@ REST_FRAMEWORK = {
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
-]
+# テスト環境ではパスワードバリデーションを無効化（短いパスワードも使用可能）
+# 本番環境（DEBUG=False）では標準のバリデーションを適用
+if DEBUG:
+    # 開発・テスト環境: バリデーション無効化
+    AUTH_PASSWORD_VALIDATORS = []
+else:
+    # 本番環境: 標準バリデーション
+    AUTH_PASSWORD_VALIDATORS = [
+        {
+            "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+        },
+        {
+            "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        },
+        {
+            "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+        },
+        {
+            "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+        },
+    ]
 
 
 # Internationalization

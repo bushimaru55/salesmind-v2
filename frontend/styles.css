@@ -179,6 +179,12 @@ body {
     margin: 0 auto;
 }
 
+.auth-form form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
 .auth-form input {
     padding: 10px;
     border: none;

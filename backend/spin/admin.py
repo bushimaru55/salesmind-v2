@@ -1,6 +1,80 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import User
 from django.utils.html import format_html
 from .models import Session, ChatMessage, Report
+
+
+# Django標準のUserモデルを一旦登録解除
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class CustomUserAdmin(BaseUserAdmin):
+    """カスタムユーザー管理画面"""
+    
+    # 一覧表示
+    list_display = ['username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'is_superuser', 'session_count', 'last_login', 'date_joined']
+    list_filter = ['is_staff', 'is_superuser', 'is_active', 'date_joined', 'last_login']
+    search_fields = ['username', 'email', 'first_name', 'last_name']
+    ordering = ['-date_joined']
+    
+    # 詳細ページのフィールドセット
+    fieldsets = (
+        ('ログイン情報', {
+            'fields': ('username', 'password')
+        }),
+        ('個人情報', {
+            'fields': ('first_name', 'last_name', 'email')
+        }),
+        ('権限', {
+            'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
+        }),
+        ('重要な日付', {
+            'fields': ('last_login', 'date_joined')
+        }),
+        ('統計情報', {
+            'fields': ('session_count_display', 'report_count_display'),
+        }),
+    )
+    
+    # 新規ユーザー作成時のフィールドセット
+    add_fieldsets = (
+        ('ログイン情報', {
+            'classes': ('wide',),
+            'fields': ('username', 'password1', 'password2'),
+        }),
+        ('個人情報', {
+            'fields': ('email', 'first_name', 'last_name'),
+        }),
+        ('権限', {
+            'fields': ('is_active', 'is_staff', 'is_superuser'),
+        }),
+    )
+    
+    readonly_fields = ['last_login', 'date_joined', 'session_count_display', 'report_count_display']
+    
+    def session_count(self, obj):
+        """セッション数を表示"""
+        count = obj.sessions.count()
+        return count
+    session_count.short_description = 'セッション数'
+    
+    def session_count_display(self, obj):
+        """詳細ページでセッション数を表示（リンク付き）"""
+        count = obj.sessions.count()
+        if count > 0:
+            return format_html('<a href="/admin/spin/session/?user__id__exact={}">{} セッション</a>', obj.id, count)
+        return "0 セッション"
+    session_count_display.short_description = 'セッション数'
+    
+    def report_count_display(self, obj):
+        """詳細ページでレポート数を表示"""
+        count = Report.objects.filter(session__user=obj).count()
+        if count > 0:
+            return format_html('<a href="/admin/spin/report/?session__user__id__exact={}">{} レポート</a>', obj.id, count)
+        return "0 レポート"
+    report_count_display.short_description = 'レポート数'
 
 
 class ChatMessageInline(admin.TabularInline):

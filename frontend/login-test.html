@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログインテスト</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔐 ログインテスト</h1>
+    
+    <div class="info">
+        <strong>デフォルト認証情報:</strong><br>
+        Username: testuser<br>
+        Password: test
+    </div>
+
+    <div class="form-group">
+        <label>ユーザー名:</label>
+        <input type="text" id="username" value="testuser">
+    </div>
+
+    <div class="form-group">
+        <label>パスワード:</label>
+        <input type="password" id="password" value="test">
+    </div>
+
+    <button onclick="testLogin()">ログインテスト</button>
+    <button onclick="testDirectAPI()">直接API呼び出し</button>
+
+    <div id="result"></div>
+
+    <script>
+        const API_BASE_URL = window.location.origin + '/api';
+
+        async function testLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('result');
+
+            resultDiv.innerHTML = '<div class="info">ログイン処理中...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/login/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <h3>✅ ログイン成功！</h3>
+                            <p><strong>ユーザー名:</strong> ${data.user.username}</p>
+                            <p><strong>メール:</strong> ${data.user.email}</p>
+                            <p><strong>トークン:</strong></p>
+                            <pre>${data.token}</pre>
+                            <p><strong>完全なレスポンス:</strong></p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                    
+                    // LocalStorageに保存
+                    localStorage.setItem('authToken', data.token);
+                    localStorage.setItem('username', data.user.username);
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <h3>❌ ログイン失敗</h3>
+                            <p><strong>HTTPステータス:</strong> ${response.status}</p>
+                            <p><strong>エラーメッセージ:</strong> ${data.message || data.error}</p>
+                            <p><strong>完全なレスポンス:</strong></p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ エラー発生</h3>
+                        <p><strong>エラー:</strong> ${error.message}</p>
+                        <p><strong>スタックトレース:</strong></p>
+                        <pre>${error.stack}</pre>
+                    </div>
+                `;
+            }
+        }
+
+        async function testDirectAPI() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<div class="info">直接API呼び出し中...</div>';
+
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/login/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: 'testuser',
+                        password: 'test'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <h3>✅ 直接API呼び出し成功！</h3>
+                            <p>nginx経由ではなく、直接バックエンド（8000ポート）に接続しました</p>
+                            <p><strong>ユーザー名:</strong> ${data.user.username}</p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <h3>❌ 直接API呼び出し失敗</h3>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ エラー発生</h3>
+                        <p>${error.message}</p>
+                        <p>CORS エラーの可能性があります</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Enterキーでログイン
+        document.getElementById('password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                testLogin();
+            }
+        });
+    </script>
+</body>
+</html>
+
