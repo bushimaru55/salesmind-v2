@@ -16,23 +16,27 @@
                 <span class="sidebar-logo-icon">🧠</span>
             </div>
             <div class="sidebar-menu">
-                <a href="#" class="sidebar-item active" onclick="navigateTo('home')" title="ホーム">
+                <a href="#" class="sidebar-item active" onclick="navigateTo('home', event)" title="ホーム">
                     <i class="fas fa-home"></i>
                     <span class="sidebar-tooltip">ホーム</span>
                 </a>
-                <a href="#" class="sidebar-item" onclick="navigateTo('diagnosis')" title="診断">
+                <a href="#" class="sidebar-item" onclick="navigateTo('dashboard', event)" title="ダッシュボード">
+                    <i class="fas fa-chart-line"></i>
+                    <span class="sidebar-tooltip">ダッシュボード</span>
+                </a>
+                <a href="#" class="sidebar-item" onclick="navigateTo('diagnosis', event)" title="診断">
                     <i class="fas fa-stethoscope"></i>
                     <span class="sidebar-tooltip">診断開始</span>
                 </a>
-                <a href="#" class="sidebar-item" onclick="navigateTo('history')" title="履歴">
+                <a href="#" class="sidebar-item" onclick="navigateTo('history', event)" title="履歴">
                     <i class="fas fa-history"></i>
                     <span class="sidebar-tooltip">履歴</span>
                 </a>
-                <a href="#" class="sidebar-item" onclick="navigateTo('ranking')" title="ランキング">
+                <a href="#" class="sidebar-item" onclick="navigateTo('ranking', event)" title="ランキング">
                     <i class="fas fa-trophy"></i>
                     <span class="sidebar-tooltip">ランキング</span>
                 </a>
-                <a href="#" class="sidebar-item" onclick="navigateTo('settings')" title="設定">
+                <a href="#" class="sidebar-item" onclick="navigateTo('settings', event)" title="設定">
                     <i class="fas fa-cog"></i>
                     <span class="sidebar-tooltip">設定</span>
                 </a>
@@ -311,6 +315,56 @@
                     <div class="ranking-empty" id="rankingEmpty" style="display: none;">
                         <p>まだランキングデータがありません。</p>
                         <p>診断を完了するとランキングに表示されます。</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ダッシュボード -->
+            <section id="dashboard" class="step-section" style="display: none;">
+                <div class="step-header">
+                    <h2>ダッシュボード</h2>
+                    <button onclick="returnToModeSelection()" class="btn-back-to-mode">← モード選択に戻る</button>
+                </div>
+                <div class="dashboard-container">
+                    <!-- 統計カード -->
+                    <div class="dashboard-stats">
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-comments"></i></div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="totalSessionsCount">-</div>
+                                <div class="stat-label">総セッション数</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-chart-bar"></i></div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="averageScoreValue">-</div>
+                                <div class="stat-label">平均スコア</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-medal"></i></div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="highestScoreValue">-</div>
+                                <div class="stat-label">最高スコア</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 直近のセッション履歴 -->
+                    <div class="dashboard-section">
+                        <h3><i class="fas fa-history"></i> 直近のセッション</h3>
+                        <div id="recentSessionsList" class="recent-sessions-list">
+                            <p class="loading-text">セッション履歴を読み込み中...</p>
+                        </div>
+                    </div>
+
+                    <!-- 設定エリア（将来の拡張用プレースホルダー） -->
+                    <div class="dashboard-section settings-section">
+                        <h3><i class="fas fa-cog"></i> 設定 <span class="coming-soon-badge">Coming Soon</span></h3>
+                        <div class="settings-placeholder">
+                            <p><i class="fas fa-user-cog"></i> ペルソナ設定などユーザー個別の設定機能は今後追加予定です。</p>
+                        </div>
                     </div>
                 </div>
             </section>

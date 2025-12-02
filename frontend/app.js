@@ -2041,18 +2041,26 @@ const originalHandleLoginSuccess = function(data) {
 };
 
 // サイドバーナビゲーション
-function navigateTo(page) {
+function navigateTo(page, evt) {
     // すべてのサイドバーアイテムからactiveクラスを削除
     document.querySelectorAll('.sidebar-item').forEach(item => {
         item.classList.remove('active');
     });
     
     // クリックされたアイテムにactiveクラスを追加
-    event.currentTarget.classList.add('active');
+    const clickedElement = evt ? evt.currentTarget : (event ? event.currentTarget : null);
+    if (clickedElement) {
+        clickedElement.classList.add('active');
+    }
     
     switch(page) {
         case 'home':
             returnToModeSelection();
+            break;
+        case 'dashboard':
+            // ダッシュボード画面
+            showStep('dashboard');
+            loadDashboard();
             break;
         case 'diagnosis':
             // モードが選択されている場合はそのモードの最初のステップへ
@@ -2079,6 +2087,169 @@ function navigateTo(page) {
         default:
             showStep(0);
     }
+}
+
+// ダッシュボードを読み込む
+async function loadDashboard() {
+    if (window.logger) {
+        window.logger.info('ダッシュボードを読み込み中');
+    }
+    
+    // ログインしていない場合はエラー表示
+    if (!authToken) {
+        displayDashboardError('ダッシュボードを表示するにはログインが必要です');
+        return;
+    }
+    
+    // 統計カードをローディング状態に
+    document.getElementById('totalSessionsCount').textContent = '...';
+    document.getElementById('averageScoreValue').textContent = '...';
+    document.getElementById('highestScoreValue').textContent = '...';
+    document.getElementById('recentSessionsList').innerHTML = '<p class="loading-text">セッション履歴を読み込み中...</p>';
+    
+    try {
+        // セッション一覧を取得
+        const response = await fetch(`${API_BASE_URL}/session/list/`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Token ${authToken}`
+            }
+        });
+        
+        if (!response.ok) {
+            if (response.status === 401) {
+                displayDashboardError('ログインセッションが期限切れです。再度ログインしてください。');
+                return;
+            }
+            throw new Error(`セッション取得に失敗しました: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const sessions = data.results || data || [];
+        
+        // 統計情報を計算・表示
+        displayDashboardStats(sessions);
+        
+        // 直近のセッション履歴を表示
+        displayRecentSessions(sessions);
+        
+        if (window.logger) {
+            window.logger.info('ダッシュボード読み込み完了', { sessionCount: sessions.length });
+        }
+    } catch (error) {
+        console.error('ダッシュボード読み込みエラー:', error);
+        if (window.logger) {
+            window.logger.error('ダッシュボード読み込みエラー', { error: error.message });
+        }
+        displayDashboardError('ダッシュボードの読み込みに失敗しました: ' + error.message);
+    }
+}
+
+// ダッシュボードエラー表示
+function displayDashboardError(message) {
+    document.getElementById('totalSessionsCount').textContent = '-';
+    document.getElementById('averageScoreValue').textContent = '-';
+    document.getElementById('highestScoreValue').textContent = '-';
+    document.getElementById('recentSessionsList').innerHTML = `<p class="error-message">${escapeHtml(message)}</p>`;
+}
+
+// 統計情報を表示
+function displayDashboardStats(sessions) {
+    // 総セッション数
+    const totalSessions = sessions.length;
+    document.getElementById('totalSessionsCount').textContent = totalSessions;
+    
+    // 完了済みセッション（スコアがあるもの）をフィルタ
+    const scoredSessions = sessions.filter(s => s.status === 'finished' && s.report);
+    
+    if (scoredSessions.length > 0) {
+        // 平均スコア計算
+        let totalScore = 0;
+        let highestScore = 0;
+        
+        scoredSessions.forEach(session => {
+            // report内のスコアを取得
+            const report = session.report;
+            if (report && report.spin_scores && report.spin_scores.total !== undefined) {
+                const score = report.spin_scores.total;
+                totalScore += score;
+                if (score > highestScore) {
+                    highestScore = score;
+                }
+            }
+        });
+        
+        const avgScore = totalScore / scoredSessions.length;
+        document.getElementById('averageScoreValue').textContent = avgScore.toFixed(1) + '点';
+        document.getElementById('highestScoreValue').textContent = highestScore.toFixed(1) + '点';
+    } else {
+        document.getElementById('averageScoreValue').textContent = '-';
+        document.getElementById('highestScoreValue').textContent = '-';
+    }
+}
+
+// 直近のセッション履歴を表示
+function displayRecentSessions(sessions) {
+    const container = document.getElementById('recentSessionsList');
+    if (!container) return;
+    
+    if (sessions.length === 0) {
+        container.innerHTML = `
+            <div class="empty-sessions-message">
+                <i class="fas fa-inbox"></i>
+                <p>まだセッションがありません</p>
+                <p>診断を開始して、営業スキルをトレーニングしましょう</p>
+                <button class="btn-primary" onclick="navigateTo('home')">診断を開始する</button>
+            </div>
+        `;
+        return;
+    }
+    
+    // 直近5件を表示
+    const recentSessions = sessions.slice(0, 5);
+    
+    let html = '';
+    recentSessions.forEach(session => {
+        const date = new Date(session.started_at);
+        const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
+        
+        const modeClass = session.mode === 'simple' ? 'simple' : 'detailed';
+        const modeLabel = session.mode === 'simple' ? '簡易' : '詳細';
+        
+        // スコアの取得
+        let scoreDisplay = '';
+        if (session.report && session.report.spin_scores && session.report.spin_scores.total !== undefined) {
+            scoreDisplay = `<span class="recent-session-score">${session.report.spin_scores.total.toFixed(1)}点</span>`;
+        } else if (session.status === 'active') {
+            scoreDisplay = `<span class="recent-session-score no-score">進行中</span>`;
+        } else {
+            scoreDisplay = `<span class="recent-session-score no-score">-</span>`;
+        }
+        
+        html += `
+            <div class="recent-session-item" onclick="resumeSession('${session.id}')">
+                <span class="recent-session-date">${dateStr}</span>
+                <div class="recent-session-info">
+                    <span class="recent-session-industry">${escapeHtml(session.industry || '-')}</span>
+                    <span class="recent-session-mode ${modeClass}">${modeLabel}</span>
+                </div>
+                ${scoreDisplay}
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// セッションを再開
+function resumeSession(sessionId) {
+    if (window.logger) {
+        window.logger.info('セッションを再開', { sessionId });
+    }
+    
+    currentSessionId = sessionId;
+    showStep(3);
+    loadChatHistory();
 }
 
 // サイドバーのユーザー状態を更新
