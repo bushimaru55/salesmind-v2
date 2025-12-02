@@ -247,10 +247,11 @@ body {
 }
 
 .step-section.active {
+    padding-bottom: 20px;
     display: flex;
     flex-direction: column;
     flex: 1;
-    overflow: hidden;
+    overflow-y: auto;
 }
 
 .step-header {
@@ -340,8 +341,7 @@ body {
     font-weight: bold;
     cursor: pointer;
     transition: all 0.3s;
-    margin-right: 10px;
-    margin-top: 10px;
+    margin: 10px 10px 30px 0;
 }
 
 .btn-primary:hover {
@@ -1248,4 +1248,5 @@ body {
         margin-top: 8px;
     }
 }
+
 
