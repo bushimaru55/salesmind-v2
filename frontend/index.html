@@ -9,26 +9,64 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
-        <!-- ヘッダー -->
-        <header class="header">
-            <div class="header-left">
-                <div class="logo">
-                    <span class="logo-icon">🧠</span>
-                    <span class="logo-text">SalesMind</span>
-                </div>
+    <div class="app-layout">
+        <!-- 左サイドバーメニュー -->
+        <nav class="sidebar">
+            <div class="sidebar-logo">
+                <span class="sidebar-logo-icon">🧠</span>
             </div>
-            <div class="header-right">
-                <div id="headerUserInfo" class="header-user-info" style="display: none;">
-                    <span class="user-name" id="headerUsernameDisplay"></span>
-                    <button onclick="logout()" class="btn-logout">ログアウト</button>
-                </div>
-                <div id="headerAuthButtons" class="header-auth-buttons">
-                    <button onclick="showLoginModal()" class="btn-login">ログイン</button>
-                    <button onclick="showRegisterModal()" class="btn-register">新規登録</button>
-                </div>
+            <div class="sidebar-menu">
+                <a href="#" class="sidebar-item active" onclick="navigateTo('home')" title="ホーム">
+                    <i class="fas fa-home"></i>
+                    <span class="sidebar-tooltip">ホーム</span>
+                </a>
+                <a href="#" class="sidebar-item" onclick="navigateTo('diagnosis')" title="診断">
+                    <i class="fas fa-stethoscope"></i>
+                    <span class="sidebar-tooltip">診断開始</span>
+                </a>
+                <a href="#" class="sidebar-item" onclick="navigateTo('history')" title="履歴">
+                    <i class="fas fa-history"></i>
+                    <span class="sidebar-tooltip">履歴</span>
+                </a>
+                <a href="#" class="sidebar-item" onclick="navigateTo('ranking')" title="ランキング">
+                    <i class="fas fa-trophy"></i>
+                    <span class="sidebar-tooltip">ランキング</span>
+                </a>
+                <a href="#" class="sidebar-item" onclick="navigateTo('settings')" title="設定">
+                    <i class="fas fa-cog"></i>
+                    <span class="sidebar-tooltip">設定</span>
+                </a>
             </div>
-        </header>
+            <div class="sidebar-bottom">
+                <a href="#" class="sidebar-item" id="sidebarUserBtn" onclick="showLoginModal()" title="ログイン">
+                    <i class="fas fa-user"></i>
+                    <span class="sidebar-tooltip" id="sidebarUserTooltip">ログイン</span>
+                </a>
+            </div>
+        </nav>
+
+        <!-- メインコンテンツ -->
+        <div class="main-wrapper">
+            <div class="container">
+                <!-- ヘッダー -->
+                <header class="header">
+                    <div class="header-left">
+                        <div class="logo">
+                            <span class="logo-icon">🧠</span>
+                            <span class="logo-text">SalesMind</span>
+                        </div>
+                    </div>
+                    <div class="header-right">
+                        <div id="headerUserInfo" class="header-user-info" style="display: none;">
+                            <span class="user-name" id="headerUsernameDisplay"></span>
+                            <button onclick="logout()" class="btn-logout">ログアウト</button>
+                        </div>
+                        <div id="headerAuthButtons" class="header-auth-buttons">
+                            <button onclick="showLoginModal()" class="btn-login">ログイン</button>
+                            <button onclick="showRegisterModal()" class="btn-register">新規登録</button>
+                        </div>
+                    </div>
+                </header>
 
         <!-- ログイン・登録モーダル -->
         <div id="authModal" class="modal" style="display: none;">
@@ -277,6 +315,8 @@
                 </div>
             </section>
         </main>
+            </div>
+        </div>
     </div>
 
     <!-- ログビューアー -->

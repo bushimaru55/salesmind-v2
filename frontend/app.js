@@ -2039,3 +2039,74 @@ const originalHandleLoginSuccess = function(data) {
     checkAuth();
     initMode();
 };
+
+// サイドバーナビゲーション
+function navigateTo(page) {
+    // すべてのサイドバーアイテムからactiveクラスを削除
+    document.querySelectorAll('.sidebar-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    
+    // クリックされたアイテムにactiveクラスを追加
+    event.currentTarget.classList.add('active');
+    
+    switch(page) {
+        case 'home':
+            returnToModeSelection();
+            break;
+        case 'diagnosis':
+            // モードが選択されている場合はそのモードの最初のステップへ
+            if (currentMode === 'simple') {
+                showStep('step1-simple');
+            } else if (currentMode === 'detailed') {
+                showStep('step1-detailed');
+            } else {
+                // モード未選択の場合はモード選択画面へ
+                showStep(0);
+            }
+            break;
+        case 'history':
+            // 履歴画面（将来的に実装）
+            alert('履歴機能は近日公開予定です');
+            break;
+        case 'ranking':
+            showStep('ranking');
+            break;
+        case 'settings':
+            // 設定画面（将来的に実装）
+            alert('設定機能は近日公開予定です');
+            break;
+        default:
+            showStep(0);
+    }
+}
+
+// サイドバーのユーザー状態を更新
+function updateSidebarUserState() {
+    const sidebarUserBtn = document.getElementById('sidebarUserBtn');
+    const sidebarUserTooltip = document.getElementById('sidebarUserTooltip');
+    
+    if (!sidebarUserBtn || !sidebarUserTooltip) return;
+    
+    if (authToken) {
+        const username = localStorage.getItem('username');
+        sidebarUserTooltip.textContent = username || 'ユーザー';
+        sidebarUserBtn.onclick = function() {
+            if (confirm('ログアウトしますか？')) {
+                logout();
+            }
+        };
+        sidebarUserBtn.innerHTML = '<i class="fas fa-user-check"></i><span class="sidebar-tooltip" id="sidebarUserTooltip">' + (username || 'ユーザー') + '</span>';
+    } else {
+        sidebarUserTooltip.textContent = 'ログイン';
+        sidebarUserBtn.onclick = showLoginModal;
+        sidebarUserBtn.innerHTML = '<i class="fas fa-user"></i><span class="sidebar-tooltip" id="sidebarUserTooltip">ログイン</span>';
+    }
+}
+
+// 既存のcheckAuth関数を拡張してサイドバーも更新
+const originalCheckAuthForSidebar = checkAuth;
+checkAuth = function() {
+    originalCheckAuthForSidebar.call(this);
+    updateSidebarUserState();
+};
