@@ -463,13 +463,17 @@ body {
 
 /* 商談成功率パネル（詳細診断モード用） */
 .success-meter {
+    position: sticky;
+    top: 0;
+    z-index: 100;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border: 2px solid #667eea;
-    border-radius: 12px;
-    padding: 20px;
+    border-radius: 0 0 12px 12px;
+    padding: 15px 20px;
     margin-bottom: 20px;
     color: white;
-    box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    transition: all 0.3s ease;
 }
 
 .success-meter-header {
@@ -486,19 +490,21 @@ body {
 
 .success-meter-content {
     display: flex;
-    flex-direction: column;
-    gap: 12px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 20px;
+    justify-content: space-between;
 }
 
 .success-probability-display {
     display: flex;
     align-items: baseline;
     gap: 5px;
-    margin-bottom: 10px;
 }
 
 .success-probability-value {
-    font-size: 3em;
+    font-size: 2em;
     font-weight: bold;
     color: white;
     line-height: 1;
@@ -514,14 +520,14 @@ body {
     display: flex;
     align-items: center;
     gap: 5px;
-    padding: 8px 15px;
+    padding: 6px 12px;
     background: rgba(255, 255, 255, 0.2);
-    border-radius: 6px;
+    border-radius: 20px;
     animation: slideIn 0.3s ease-out;
 }
 
 .success-delta-value {
-    font-size: 1.5em;
+    font-size: 1.2em;
     font-weight: bold;
 }
 
@@ -539,16 +545,17 @@ body {
 }
 
 .success-reason-display {
-    padding: 10px;
+    padding: 8px 12px;
     background: rgba(255, 255, 255, 0.15);
     border-radius: 6px;
-    margin-top: 5px;
+    flex: 1 1 100%;
+    max-width: 100%;
 }
 
 .success-reason-text {
     color: white;
-    font-size: 0.95em;
-    line-height: 1.6;
+    font-size: 0.9em;
+    line-height: 1.5;
     margin: 0;
 }
 
@@ -1172,6 +1179,34 @@ body {
     
     .mode-buttons {
         flex-direction: column;
+    }
+    
+    /* 成功率パネルのモバイル対応 */
+    .success-meter {
+        padding: 12px 15px;
+        border-radius: 0 0 8px 8px;
+    }
+    
+    .success-meter-header h3 {
+        font-size: 1em;
+        padding-bottom: 8px;
+    }
+    
+    .success-meter-content {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .success-probability-value {
+        font-size: 1.8em;
+    }
+    
+    .success-delta-value {
+        font-size: 1em;
+    }
+    
+    .success-reason-text {
+        font-size: 0.85em;
     }
 }
 
