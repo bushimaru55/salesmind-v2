@@ -1571,6 +1571,13 @@ body {
     font-size: 1.8em;
 }
 
+.sidebar-logo-img {
+    width: 40px;
+    height: auto;
+    border-radius: 8px;
+    object-fit: contain;
+}
+
 .sidebar-menu {
     display: flex;
     flex-direction: column;
@@ -1753,6 +1760,13 @@ body {
 
 .logo-text {
     color: white;
+}
+
+.header-logo-img {
+    height: 36px;
+    width: auto;
+    object-fit: contain;
+    border-radius: 6px;
 }
 
 .header-right {
