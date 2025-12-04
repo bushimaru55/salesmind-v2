@@ -180,6 +180,16 @@ body {
     background: var(--gray-100);
 }
 
+.btn-mobile-login {
+    background: var(--gray-100);
+    color: var(--text) !important;
+    text-align: center;
+    border: 1px solid var(--gray-200);
+}
+
+.btn-mobile-login:hover {
+    background: var(--gray-200);
+}
 .btn-mobile-signup {
     background: var(--gradient-primary);
     color: var(--white) !important;
