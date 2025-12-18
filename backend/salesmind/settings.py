@@ -14,24 +14,29 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from project root (.env)
+PROJECT_ROOT = BASE_DIR.parent
+load_dotenv(PROJECT_ROOT / ".env")
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY")
-if not SECRET_KEY:
-    raise ValueError("SECRET_KEY environment variable is required")
+# If SECRET_KEY is not provided, fall back to a development key to avoid startup errors.
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = ["*"]
+allowed_hosts_env = os.getenv("ALLOWED_HOSTS")
+if allowed_hosts_env:
+    ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_env.split(",") if h.strip()]
+else:
+    ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -109,18 +114,26 @@ else:
 CORS_ALLOW_ALL_ORIGINS = True
 
 # CSRF設定（nginx経由のアクセスを許可）
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-]
+csrf_trusted_origins_env = os.getenv("CSRF_TRUSTED_ORIGINS")
+if csrf_trusted_origins_env:
+    CSRF_TRUSTED_ORIGINS = [
+        origin.strip()
+        for origin in csrf_trusted_origins_env.split(",")
+        if origin.strip()
+    ]
+else:
+    CSRF_TRUSTED_ORIGINS = [
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
 
 # REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
-        'spin.authentication.CsrfExemptSessionAuthentication',  # CSRF検証を無効化したSessionAuthentication
+        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -131,27 +144,20 @@ REST_FRAMEWORK = {
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
-# テスト環境ではパスワードバリデーションを無効化（短いパスワードも使用可能）
-# 本番環境（DEBUG=False）では標準のバリデーションを適用
-if DEBUG:
-    # 開発・テスト環境: バリデーション無効化
-    AUTH_PASSWORD_VALIDATORS = []
-else:
-    # 本番環境: 標準バリデーション
-    AUTH_PASSWORD_VALIDATORS = [
-        {
-            "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-        },
-        {
-            "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-        },
-        {
-            "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-        },
-        {
-            "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-        },
-    ]
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
+]
 
 
 # Internationalization
@@ -170,6 +176,10 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [
+    BASE_DIR / "salesmind" / "static",
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

@@ -13,9 +13,23 @@ class OpenAIAPIKey(models.Model):
         ('general', '汎用'),
     ]
     
+    MODEL_CHOICES = [
+        ('gpt-4o', 'GPT-4o（最新・高性能）'),
+        ('gpt-4o-mini', 'GPT-4o-mini（高速・低コスト）'),
+        ('gpt-4-turbo', 'GPT-4 Turbo'),
+        ('gpt-4', 'GPT-4'),
+        ('gpt-3.5-turbo', 'GPT-3.5 Turbo'),
+    ]
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=200, help_text="キーの識別名（例: 本番用、テスト用）")
     api_key = models.CharField(max_length=500, help_text="OpenAI APIキー")
+    model_name = models.CharField(
+        max_length=50,
+        choices=MODEL_CHOICES,
+        default='gpt-4o-mini',
+        help_text="使用するOpenAIモデル"
+    )
     purpose = models.CharField(
         max_length=50, 
         choices=PURPOSE_CHOICES, 
@@ -36,7 +50,7 @@ class OpenAIAPIKey(models.Model):
     def __str__(self):
         status = "✓" if self.is_active else "✗"
         default = " [デフォルト]" if self.is_default else ""
-        return f"{status} {self.name} ({self.get_purpose_display()}){default}"
+        return f"{status} {self.name} ({self.get_purpose_display()}) - {self.model_name}{default}"
     
     def get_masked_key(self):
         """APIキーをマスキングして返す"""

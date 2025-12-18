@@ -1093,6 +1093,8 @@ async function startSession() {
 function proceedToChat() {
     showStep(3);
     loadChatHistory();
+    // 温度スコアパネルを初期化
+    initTemperatureScorePanel();
 }
 
 // ステップ3: チャット
@@ -1135,6 +1137,42 @@ async function sendChatMessage() {
             // 会話履歴を更新
             updateChatMessages(data.conversation);
             
+            // 温度スコアの更新
+            if (data.current_temperature !== undefined) {
+                updateTemperatureScore(data.current_temperature, data.temperature_details || {});
+            }
+            if (data.temperature_history && data.temperature_history.length > 0) {
+                updateTemperatureChart(data.temperature_history);
+            }
+            
+            // 失注確定の場合、失注情報を表示
+            if (data.loss_response) {
+                displayLossResponse(data.loss_response);
+                if (data.should_end_session) {
+                    // セッション終了を促す
+                    setTimeout(() => {
+                        if (confirm('商談が失注となりました。セッションを終了してスコアリングに進みますか？')) {
+                            finishSession();
+                        }
+                    }, 2000);
+                }
+            }
+            
+            // クロージング提案がある場合は表示
+            if (data.closing_proposal) {
+                displayClosingProposal(data.closing_proposal);
+            }
+            
+            // 会話フェーズがCLOSING_READYまたはCLOSING_ACTIONの場合、UIに表示
+            if (data.conversation_phase === 'CLOSING_READY' || data.conversation_phase === 'CLOSING_ACTION') {
+                showClosingPhaseIndicator(data.conversation_phase);
+            }
+            
+            // 失注候補または失注確定の場合、UIに表示
+            if (data.conversation_phase === 'LOSS_CANDIDATE' || data.conversation_phase === 'LOSS_CONFIRMED') {
+                showLossPhaseIndicator(data.conversation_phase);
+            }
+            
             // 詳細診断モードの場合、成功率情報を更新
             if (currentMode === 'detailed' && data.success_probability !== undefined) {
                 updateSuccessProbability(data.success_probability, data.success_delta, data.analysis_reason, {
@@ -1156,7 +1194,8 @@ async function sendChatMessage() {
                         message_spin_type: data.message_spin_type,
                         step_appropriateness: data.step_appropriateness,
                         stage_evaluation: data.stage_evaluation,
-                        session_spin_stage: data.session_spin_stage
+                        session_spin_stage: data.session_spin_stage,
+                        conversation_phase: data.conversation_phase
                     });
                 }
             }
@@ -1176,7 +1215,7 @@ function handleChatKeyPress(event) {
 }
 
 // チャットメッセージの追加
-function addChatMessage(role, message) {
+function addChatMessage(role, message, temperature = null, temperatureChange = null) {
     const container = document.getElementById('chatMessages');
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${role}`;
@@ -1184,8 +1223,18 @@ function addChatMessage(role, message) {
     const roleLabel = role === 'salesperson' ? '営業担当者' : 'AI顧客';
     const timestamp = new Date().toLocaleTimeString('ja-JP');
     
+    // 温度スコアアイコン（顧客メッセージのみ）
+    let temperatureIcon = '';
+    if (role === 'customer' && temperature !== null && temperature !== undefined) {
+        const iconClass = temperatureChange === '↑' ? 'temp-up' : temperatureChange === '↓' ? 'temp-down' : 'temp-same';
+        temperatureIcon = `<span class="temperature-icon ${iconClass}">${temperatureChange || ''}</span>`;
+    }
+    
     messageDiv.innerHTML = `
-        <div class="message-header">${roleLabel} - ${timestamp}</div>
+        <div class="message-header">
+            ${roleLabel} - ${timestamp}
+            ${temperatureIcon}
+        </div>
         <div class="message-content">${message}</div>
     `;
     
@@ -1203,9 +1252,31 @@ function updateChatMessages(conversation) {
     
     container.innerHTML = '';
     
-    conversation.forEach(msg => {
-        addChatMessage(msg.role, msg.message);
+    let previousTemperature = null;
+    conversation.forEach((msg, index) => {
+        const temperature = msg.temperature_score;
+        const temperatureChange = getTemperatureChangeIcon(previousTemperature, temperature);
+        addChatMessage(msg.role, msg.message, temperature, temperatureChange);
+        if (temperature !== undefined && temperature !== null) {
+            previousTemperature = temperature;
+        }
     });
+}
+
+// 温度スコアの変化アイコンを取得
+function getTemperatureChangeIcon(previousTemp, currentTemp) {
+    if (previousTemp === null || previousTemp === undefined || currentTemp === null || currentTemp === undefined) {
+        return null;
+    }
+    
+    const diff = currentTemp - previousTemp;
+    if (diff > 5) {
+        return '↑'; // 上昇
+    } else if (diff < -5) {
+        return '↓'; // 下降
+    } else {
+        return '→'; // 変化なし
+    }
 }
 
 // チャット履歴の読み込み
@@ -1540,8 +1611,27 @@ function displayScoringResult(data) {
         return;
     }
     
+    // エラーハンドリング: spin_scoresが存在しない場合
+    if (!data || !data.spin_scores) {
+        console.error('スコアリング結果が不正です:', data);
+        showError('scoringResult', 'スコアリング結果の取得に失敗しました。データが不正です。');
+        return;
+    }
+    
     const scores = data.spin_scores;
-    const totalScore = scores.total;
+    const totalScore = scores.total || 0;
+    
+    // 新しい5要素スコアリングに対応
+    const explorationScore = scores.exploration || 0;
+    const implicationScore = scores.implication || 0;
+    const valuePropositionScore = scores.value_proposition || 0;
+    const customerResponseScore = scores.customer_response || 0;
+    const advancementScore = scores.advancement || 0;
+    
+    // 後方互換性のため、SPIN要素も取得
+    const situationScore = scores.situation || explorationScore / 2;
+    const problemScore = scores.problem || explorationScore / 2;
+    const needScore = scores.need || valuePropositionScore;
     
     // スコアに応じた色を決定
     let scoreColor = '#667eea';
@@ -1549,35 +1639,64 @@ function displayScoringResult(data) {
     else if (totalScore >= 60) scoreColor = '#ffc107';
     else scoreColor = '#dc3545';
     
+    // 新しい5要素スコアリングの内訳を表示
+    const hasNewScoring = explorationScore > 0 || implicationScore > 0 || valuePropositionScore > 0 || customerResponseScore > 0 || advancementScore > 0;
+    
     container.innerHTML = `
         <div class="score-card">
             <div class="score-total" style="color: ${scoreColor}">${totalScore.toFixed(1)}点</div>
+            ${hasNewScoring ? `
+            <div class="score-details">
+                <h4 style="margin-top: 20px; margin-bottom: 10px; font-size: 16px; color: #333;">評価内訳（5要素）</h4>
+                <div class="score-item">
+                    <div class="score-item-label">① 探索力（Situation/Problem 深掘り）</div>
+                    <div class="score-item-value">${explorationScore}/20点</div>
+                </div>
+                <div class="score-item">
+                    <div class="score-item-label">② 影響の引き出し（Implication）</div>
+                    <div class="score-item-value">${implicationScore}/20点</div>
+                </div>
+                <div class="score-item">
+                    <div class="score-item-label">③ 価値提案の的確さ（Need-payoff）</div>
+                    <div class="score-item-value">${valuePropositionScore}/20点</div>
+                </div>
+                <div class="score-item">
+                    <div class="score-item-label">④ 顧客の反応と整合性</div>
+                    <div class="score-item-value">${customerResponseScore}/20点</div>
+                </div>
+                <div class="score-item">
+                    <div class="score-item-label">⑤ 商談前進度（デモ・体験・資料など）</div>
+                    <div class="score-item-value">${advancementScore}/20点</div>
+                </div>
+            </div>
+            ` : `
             <div class="score-details">
                 <div class="score-item">
                     <div class="score-item-label">Situation</div>
-                    <div class="score-item-value">${scores.situation}点</div>
+                    <div class="score-item-value">${situationScore}点</div>
                 </div>
                 <div class="score-item">
                     <div class="score-item-label">Problem</div>
-                    <div class="score-item-value">${scores.problem}点</div>
+                    <div class="score-item-value">${problemScore}点</div>
                 </div>
                 <div class="score-item">
                     <div class="score-item-label">Implication</div>
-                    <div class="score-item-value">${scores.implication}点</div>
+                    <div class="score-item-value">${implicationScore}点</div>
                 </div>
                 <div class="score-item">
                     <div class="score-item-label">Need</div>
-                    <div class="score-item-value">${scores.need}点</div>
+                    <div class="score-item-value">${needScore}点</div>
                 </div>
             </div>
+            `}
         </div>
         <div class="feedback-section">
             <h3>フィードバック</h3>
-            <div class="feedback-text">${data.feedback}</div>
+            <div class="feedback-text">${data.feedback || 'フィードバックがありません。'}</div>
         </div>
         <div class="feedback-section">
             <h3>次回アクション</h3>
-            <div class="feedback-text">${data.next_actions}</div>
+            <div class="feedback-text">${data.next_actions || '次回アクションがありません。'}</div>
         </div>
     `;
 }
@@ -1868,6 +1987,236 @@ function showChatLoading() {
 // チャットエラー表示
 function showChatError(message) {
     addChatMessage('customer', `[エラー] ${message}`);
+}
+
+// クロージング提案を表示
+function displayClosingProposal(proposal) {
+    const container = document.getElementById('chatMessages');
+    if (!container) return;
+    
+    const proposalDiv = document.createElement('div');
+    proposalDiv.className = 'closing-proposal';
+    proposalDiv.innerHTML = `
+        <div class="closing-proposal-header">💡 次のステップ提案</div>
+        <div class="closing-proposal-content">
+            <p><strong>${proposal.action_type}</strong></p>
+            <p>${proposal.proposal_message}</p>
+        </div>
+    `;
+    
+    container.appendChild(proposalDiv);
+    container.scrollTop = container.scrollHeight;
+}
+
+// クロージングフェーズのインジケーターを表示
+function showClosingPhaseIndicator(phase) {
+    const indicator = document.getElementById('closingPhaseIndicator');
+    if (!indicator) {
+        // インジケーターが存在しない場合は作成
+        const chatContainer = document.getElementById('chatMessages');
+        if (chatContainer) {
+            const newIndicator = document.createElement('div');
+            newIndicator.id = 'closingPhaseIndicator';
+            newIndicator.className = 'closing-phase-indicator';
+            chatContainer.parentElement.insertBefore(newIndicator, chatContainer);
+        }
+    }
+    
+    const indicatorEl = document.getElementById('closingPhaseIndicator');
+    if (indicatorEl) {
+        const phaseLabels = {
+            'CLOSING_READY': '🎯 クロージング準備完了 - 次のステップを提案しましょう',
+            'CLOSING_ACTION': '✅ クロージング実行中 - 会話を収束させましょう'
+        };
+        indicatorEl.textContent = phaseLabels[phase] || 'クロージング段階';
+        indicatorEl.style.display = 'block';
+    }
+}
+
+// 失注フェーズのインジケーターを表示
+function showLossPhaseIndicator(phase) {
+    const indicator = document.getElementById('lossPhaseIndicator');
+    if (!indicator) {
+        // インジケーターが存在しない場合は作成
+        const chatContainer = document.getElementById('chatMessages');
+        if (chatContainer) {
+            const newIndicator = document.createElement('div');
+            newIndicator.id = 'lossPhaseIndicator';
+            newIndicator.className = 'loss-phase-indicator';
+            chatContainer.parentElement.insertBefore(newIndicator, chatContainer);
+        }
+    }
+    
+    const indicatorEl = document.getElementById('lossPhaseIndicator');
+    if (indicatorEl) {
+        const phaseLabels = {
+            'LOSS_CANDIDATE': '⚠️ 失注候補 - 商談が失注に向かっています',
+            'LOSS_CONFIRMED': '❌ 失注確定 - 商談が失注となりました'
+        };
+        indicatorEl.textContent = phaseLabels[phase] || '失注段階';
+        indicatorEl.style.display = 'block';
+    }
+}
+
+// 失注確定時の応答を表示
+function displayLossResponse(lossResponse) {
+    const container = document.getElementById('chatMessages');
+    if (!container) return;
+    
+    const lossDiv = document.createElement('div');
+    lossDiv.className = 'loss-response';
+    lossDiv.innerHTML = `
+        <div class="loss-response-header">❌ 失注確定</div>
+        <div class="loss-response-content">
+            <p><strong>失注理由:</strong> ${lossResponse.loss_reason_label}</p>
+            <p>${lossResponse.response_message}</p>
+        </div>
+    `;
+    
+    container.appendChild(lossDiv);
+    container.scrollTop = container.scrollHeight;
+}
+
+// 温度スコアを更新
+function updateTemperatureScore(temperature, details) {
+    const panel = document.getElementById('temperatureScorePanel');
+    if (panel) {
+        panel.style.display = 'flex';
+    }
+    
+    // 円形ゲージを更新
+    const gaugeCircle = document.getElementById('gaugeCircle');
+    const gaugeText = document.getElementById('gaugeText');
+    
+    if (gaugeCircle && gaugeText) {
+        const circumference = 2 * Math.PI * 50; // r=50
+        const offset = circumference - (temperature / 100) * circumference;
+        gaugeCircle.style.strokeDashoffset = offset;
+        gaugeText.textContent = Math.round(temperature);
+        
+        // 色を温度に応じて変更
+        if (temperature >= 70) {
+            gaugeCircle.style.stroke = '#28a745'; // 緑
+        } else if (temperature >= 40) {
+            gaugeCircle.style.stroke = '#ffc107'; // 黄
+        } else {
+            gaugeCircle.style.stroke = '#dc3545'; // 赤
+        }
+    }
+}
+
+// 温度スコアの折れ線グラフを更新
+let temperatureChartData = [];
+let temperatureChartCanvas = null;
+let temperatureChartCtx = null;
+
+function initTemperatureChart() {
+    temperatureChartCanvas = document.getElementById('temperatureChart');
+    if (temperatureChartCanvas) {
+        temperatureChartCtx = temperatureChartCanvas.getContext('2d');
+    }
+}
+
+function updateTemperatureChart(history) {
+    if (!temperatureChartCtx) {
+        initTemperatureChart();
+    }
+    
+    if (!temperatureChartCtx || !history || history.length === 0) {
+        return;
+    }
+    
+    temperatureChartData = history.map(h => ({
+        sequence: h.sequence,
+        temperature: h.temperature,
+        created_at: h.created_at
+    }));
+    
+    drawTemperatureChart();
+}
+
+function drawTemperatureChart() {
+    if (!temperatureChartCtx || temperatureChartData.length === 0) {
+        return;
+    }
+    
+    const canvas = temperatureChartCanvas;
+    const ctx = temperatureChartCtx;
+    const width = canvas.width;
+    const height = canvas.height;
+    const padding = 20;
+    
+    // クリア
+    ctx.clearRect(0, 0, width, height);
+    
+    if (temperatureChartData.length < 2) {
+        return;
+    }
+    
+    // データの範囲を計算
+    const minTemp = Math.min(...temperatureChartData.map(d => d.temperature));
+    const maxTemp = Math.max(...temperatureChartData.map(d => d.temperature));
+    const tempRange = maxTemp - minTemp || 100;
+    
+    // グラフ領域
+    const graphWidth = width - padding * 2;
+    const graphHeight = height - padding * 2;
+    
+    // グリッド線を描画
+    ctx.strokeStyle = '#e0e0e0';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+        const y = padding + (graphHeight / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(width - padding, y);
+        ctx.stroke();
+    }
+    
+    // 折れ線を描画
+    ctx.strokeStyle = '#667eea';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    
+    temperatureChartData.forEach((data, index) => {
+        const x = padding + (graphWidth / (temperatureChartData.length - 1)) * index;
+        const y = padding + graphHeight - ((data.temperature - minTemp) / tempRange) * graphHeight;
+        
+        if (index === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    });
+    
+    ctx.stroke();
+    
+    // 点を描画
+    ctx.fillStyle = '#667eea';
+    temperatureChartData.forEach((data, index) => {
+        const x = padding + (graphWidth / (temperatureChartData.length - 1)) * index;
+        const y = padding + graphHeight - ((data.temperature - minTemp) / tempRange) * graphHeight;
+        
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, 2 * Math.PI);
+        ctx.fill();
+    });
+    
+    // ラベルを描画
+    ctx.fillStyle = '#666';
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('0', padding - 10, height - padding + 5);
+    ctx.fillText('100', padding - 10, padding + 5);
+}
+
+// 温度スコアパネルの初期化
+function initTemperatureScorePanel() {
+    initTemperatureChart();
+    const panel = document.getElementById('temperatureScorePanel');
+    if (panel) {
+        panel.style.display = 'none';
+    }
 }
 
 // ランキング表示

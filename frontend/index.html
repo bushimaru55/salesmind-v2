@@ -4,96 +4,40 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SalesMind - AI営業思考トレーナー</title>
-    <!-- Font Awesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="app-layout">
-        <!-- 左サイドバーメニュー -->
-        <nav class="sidebar">
-            <div class="sidebar-logo">
-                <img src="images/logo.png" alt="MindBridge" class="sidebar-logo-img">
-            </div>
-            <div class="sidebar-menu">
-                <a href="#" class="sidebar-item active" onclick="navigateTo('home', event)" title="ホーム">
-                    <i class="fas fa-home"></i>
-                    <span class="sidebar-tooltip">ホーム</span>
-                </a>
-                <a href="#" class="sidebar-item" onclick="navigateTo('dashboard', event)" title="ダッシュボード">
-                    <i class="fas fa-chart-line"></i>
-                    <span class="sidebar-tooltip">ダッシュボード</span>
-                </a>
-                <a href="#" class="sidebar-item" onclick="navigateTo('diagnosis', event)" title="診断">
-                    <i class="fas fa-stethoscope"></i>
-                    <span class="sidebar-tooltip">診断開始</span>
-                </a>
-                <a href="#" class="sidebar-item" onclick="navigateTo('history', event)" title="履歴">
-                    <i class="fas fa-history"></i>
-                    <span class="sidebar-tooltip">履歴</span>
-                </a>
-                <a href="#" class="sidebar-item" onclick="navigateTo('ranking', event)" title="ランキング">
-                    <i class="fas fa-trophy"></i>
-                    <span class="sidebar-tooltip">ランキング</span>
-                </a>
-                <a href="#" class="sidebar-item" onclick="navigateTo('settings', event)" title="設定">
-                    <i class="fas fa-cog"></i>
-                    <span class="sidebar-tooltip">設定</span>
-                </a>
-            </div>
-            <div class="sidebar-bottom">
-                <a href="#" class="sidebar-item" id="sidebarUserBtn" onclick="showLoginModal()" title="ログイン">
-                    <i class="fas fa-user"></i>
-                    <span class="sidebar-tooltip" id="sidebarUserTooltip">ログイン</span>
-                </a>
-            </div>
-        </nav>
-
-        <!-- メインコンテンツ -->
-        <div class="main-wrapper">
-            <div class="container">
-                <!-- ヘッダー -->
-                <header class="header">
-                    <div class="header-right">
-                        <div id="headerUserInfo" class="header-user-info" style="display: none;">
-                            <span class="user-name" id="headerUsernameDisplay"></span>
-                            <button onclick="logout()" class="btn-logout">ログアウト</button>
-                        </div>
-                        <div id="headerAuthButtons" class="header-auth-buttons">
-                            <button onclick="showLoginModal()" class="btn-login">ログイン</button>
-                            <button onclick="showRegisterModal()" class="btn-register">新規登録</button>
-                        </div>
-                    </div>
-                </header>
-
-        <!-- ログイン・登録モーダル -->
-        <div id="authModal" class="modal" style="display: none;">
-            <div class="modal-content">
-                <span class="modal-close" onclick="closeAuthModal()">&times;</span>
-                <h2 id="modalTitle">ログイン</h2>
+    <div class="container">
+        <!-- ヘッダー -->
+        <header class="header">
+            <h1>🧠 SalesMind</h1>
+            <p class="subtitle">AI営業思考トレーナー - SPINメソッドで商談スキルを向上</p>
+            <div class="auth-section">
                 <div id="authTabs" class="auth-tabs">
                     <button class="tab-button active" onclick="showLoginTab()">ログイン</button>
                     <button class="tab-button" onclick="showRegisterTab()">新規登録</button>
                 </div>
                 <div id="loginForm" class="auth-form">
-                    <form onsubmit="event.preventDefault(); login(); return false;" autocomplete="on">
-                        <input type="text" id="loginUsername" name="username" placeholder="ユーザー名" autocomplete="username">
-                        <input type="password" id="loginPassword" name="password" placeholder="パスワード" autocomplete="current-password">
-                        <button type="submit" class="btn-primary">ログイン</button>
-                    </form>
+                    <h3>ログイン</h3>
+                    <input type="text" id="loginUsername" placeholder="ユーザー名">
+                    <input type="password" id="loginPassword" placeholder="パスワード">
+                    <button onclick="login()">ログイン</button>
                     <div id="loginError" class="error-message" style="display: none;"></div>
                 </div>
                 <div id="registerForm" class="auth-form" style="display: none;">
-                    <form onsubmit="event.preventDefault(); register(); return false;" autocomplete="on">
-                        <input type="text" id="registerUsername" name="username" placeholder="ユーザー名（3文字以上）" autocomplete="username">
-                        <input type="email" id="registerEmail" name="email" placeholder="メールアドレス（オプション）" autocomplete="email">
-                        <input type="password" id="registerPassword" name="password" placeholder="パスワード（6文字以上）" autocomplete="new-password">
-                        <button type="submit" class="btn-primary">登録</button>
-                    </form>
+                    <h3>新規登録</h3>
+                    <input type="text" id="registerUsername" placeholder="ユーザー名（3文字以上）">
+                    <input type="email" id="registerEmail" placeholder="メールアドレス（オプション）">
+                    <input type="password" id="registerPassword" placeholder="パスワード（6文字以上）">
+                    <button onclick="register()">登録</button>
                     <div id="registerError" class="error-message" style="display: none;"></div>
                 </div>
+                <div id="userInfo" class="user-info" style="display: none;">
+                    <span>ようこそ、<strong id="usernameDisplay"></strong>さん</span>
+                    <button onclick="logout()">ログアウト</button>
+                </div>
             </div>
-        </div>
+        </header>
 
         <!-- メインコンテンツ -->
         <main class="main-content">
@@ -194,59 +138,72 @@
 
             <!-- ステップ3: チャット（AI顧客との対話） -->
             <section id="step3" class="step-section" style="display: none;">
-                <div class="chat-two-column">
-                    <!-- 左カラム：チャット -->
-                    <div class="chat-left-column">
-                        <div class="chat-header">
-                            <h3>💬 チャット</h3>
+                <div class="step-header">
+                    <h2>ステップ3: AI顧客との対話</h2>
+                    <button onclick="returnToModeSelection()" class="btn-back-to-mode">← モード選択に戻る</button>
+                </div>
+                <div class="chat-container">
+                    <!-- 企業概要がここに表示される（詳細診断モード用） -->
+                    <div id="companySummary" class="company-summary" style="display: none;"></div>
+                    
+                    <!-- 商談成功率パネル（詳細診断モード用） -->
+                    <div id="successMeter" class="success-meter" style="display: none;">
+                        <div class="success-meter-header">
+                            <h3>📊 商談成功率</h3>
                         </div>
-                        <div id="chatMessages" class="chat-messages">
-                            <!-- メッセージがここに表示される -->
-                        </div>
-                        <div class="chat-input-area">
-                            <input type="text" id="chatMessageInput" placeholder="営業担当者の質問を入力..." onkeypress="handleChatKeyPress(event)">
-                            <button onclick="sendChatMessage()" class="btn-primary">送信</button>
+                        <div class="success-meter-content">
+                            <div class="success-probability-display">
+                                <span class="success-probability-value" id="successProbabilityValue">50</span>
+                                <span class="success-probability-unit">%</span>
+                            </div>
+                            <div class="success-delta-display" id="successDeltaDisplay" style="display: none;">
+                                <span class="success-delta-value" id="successDeltaValue">+0</span>
+                                <span class="success-delta-unit">%</span>
+                            </div>
+                            <div class="success-reason-display" id="successReasonDisplay" style="display: none;">
+                                <p class="success-reason-text" id="successReasonText"></p>
+                            </div>
+                            <div class="success-spin-meta" id="successSpinMeta" style="display: none;">
+                                <p class="success-spin-item" id="successSpinStage"></p>
+                                <p class="success-spin-item" id="successSpinMessage"></p>
+                                <p class="success-spin-item" id="successSpinAppropriateness"></p>
+                                <p class="success-spin-item" id="successSpinEvaluation"></p>
+                                <p class="success-spin-item" id="successSpinSessionStage"></p>
+                            </div>
+                            <div class="success-system-notes" id="successSystemNotes" style="display: none;"></div>
                         </div>
                     </div>
-
-                    <!-- 右カラム：進捗状況と評価 -->
-                    <div class="chat-right-column">
-                        <!-- 企業概要（詳細診断モード用） -->
-                        <div id="companySummary" class="company-summary-sidebar" style="display: none;"></div>
-                        
-                        <!-- 商談成功率パネル（詳細診断モード用） -->
-                        <div id="successMeter" class="success-meter-sidebar" style="display: none;">
-                            <div class="success-meter-header">
-                                <h3>📊 商談成功率</h3>
-                            </div>
-                            <div class="success-meter-content">
-                                <div class="success-probability-display">
-                                    <span class="success-probability-value" id="successProbabilityValue">50</span>
-                                    <span class="success-probability-unit">%</span>
-                                </div>
-                                <div class="success-delta-display" id="successDeltaDisplay" style="display: none;">
-                                    <span class="success-delta-value" id="successDeltaValue">+0</span>
-                                    <span class="success-delta-unit">%</span>
-                                </div>
-                                <div class="success-reason-display" id="successReasonDisplay" style="display: none;">
-                                    <p class="success-reason-text" id="successReasonText"></p>
-                                </div>
-                                <div class="success-spin-meta" id="successSpinMeta" style="display: none;">
-                                    <p class="success-spin-item" id="successSpinStage"></p>
-                                    <p class="success-spin-item" id="successSpinMessage"></p>
-                                    <p class="success-spin-item" id="successSpinAppropriateness"></p>
-                                    <p class="success-spin-item" id="successSpinEvaluation"></p>
-                                    <p class="success-spin-item" id="successSpinSessionStage"></p>
-                                </div>
-                                <div class="success-system-notes" id="successSystemNotes" style="display: none;"></div>
+                    
+                    <div id="closingPhaseIndicator" class="closing-phase-indicator" style="display: none;"></div>
+                    <div id="chatMessages" class="chat-messages">
+                        <!-- メッセージがここに表示される -->
+                    </div>
+                    
+                    <!-- 温度スコア表示エリア -->
+                    <div id="temperatureScorePanel" class="temperature-score-panel" style="display: none;">
+                        <div class="temperature-gauge-container">
+                            <div class="temperature-gauge-label">顧客温度スコア</div>
+                            <div class="temperature-gauge" id="temperatureGauge">
+                                <svg viewBox="0 0 120 120" class="gauge-svg">
+                                    <circle cx="60" cy="60" r="50" fill="none" stroke="#e0e0e0" stroke-width="10"/>
+                                    <circle cx="60" cy="60" r="50" fill="none" stroke="#667eea" stroke-width="10" 
+                                            id="gaugeCircle" stroke-dasharray="314" stroke-dashoffset="314" 
+                                            transform="rotate(-90 60 60)" stroke-linecap="round"/>
+                                    <text x="60" y="65" text-anchor="middle" class="gauge-text" id="gaugeText">0</text>
+                                </svg>
                             </div>
                         </div>
-
-                        <!-- アクションボタン -->
-                        <div class="chat-actions-sidebar">
-                            <button onclick="finishSession()" class="btn-secondary btn-block">セッションを終了してスコアリング</button>
-                            <button onclick="returnToModeSelection()" class="btn-back-to-mode btn-block">← モード選択に戻る</button>
+                        <div class="temperature-chart-container">
+                            <canvas id="temperatureChart" width="400" height="100"></canvas>
                         </div>
+                    </div>
+                    
+                    <div class="chat-input-area">
+                        <input type="text" id="chatMessageInput" placeholder="営業担当者の質問を入力..." onkeypress="handleChatKeyPress(event)">
+                        <button onclick="sendChatMessage()" class="btn-primary">送信</button>
+                    </div>
+                    <div class="chat-actions">
+                        <button onclick="finishSession()" class="btn-secondary">セッションを終了してスコアリング</button>
                     </div>
                 </div>
             </section>
@@ -312,59 +269,7 @@
                     </div>
                 </div>
             </section>
-
-            <!-- ダッシュボード -->
-            <section id="dashboard" class="step-section" style="display: none;">
-                <div class="step-header">
-                    <h2>ダッシュボード</h2>
-                    <button onclick="returnToModeSelection()" class="btn-back-to-mode">← モード選択に戻る</button>
-                </div>
-                <div class="dashboard-container">
-                    <!-- 統計カード -->
-                    <div class="dashboard-stats">
-                        <div class="stat-card">
-                            <div class="stat-icon"><i class="fas fa-comments"></i></div>
-                            <div class="stat-content">
-                                <div class="stat-value" id="totalSessionsCount">-</div>
-                                <div class="stat-label">総セッション数</div>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon"><i class="fas fa-chart-bar"></i></div>
-                            <div class="stat-content">
-                                <div class="stat-value" id="averageScoreValue">-</div>
-                                <div class="stat-label">平均スコア</div>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon"><i class="fas fa-medal"></i></div>
-                            <div class="stat-content">
-                                <div class="stat-value" id="highestScoreValue">-</div>
-                                <div class="stat-label">最高スコア</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 直近のセッション履歴 -->
-                    <div class="dashboard-section">
-                        <h3><i class="fas fa-history"></i> 直近のセッション</h3>
-                        <div id="recentSessionsList" class="recent-sessions-list">
-                            <p class="loading-text">セッション履歴を読み込み中...</p>
-                        </div>
-                    </div>
-
-                    <!-- 設定エリア（将来の拡張用プレースホルダー） -->
-                    <div class="dashboard-section settings-section">
-                        <h3><i class="fas fa-cog"></i> 設定 <span class="coming-soon-badge">Coming Soon</span></h3>
-                        <div class="settings-placeholder">
-                            <p><i class="fas fa-user-cog"></i> ペルソナ設定などユーザー個別の設定機能は今後追加予定です。</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
         </main>
-            </div>
-        </div>
     </div>
 
     <!-- ログビューアー -->

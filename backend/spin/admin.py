@@ -2,7 +2,15 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.utils.html import format_html
+from django.urls import path
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from django.http import JsonResponse
 from .models import Session, ChatMessage, Report, OpenAIAPIKey
+import openai
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Django標準のUserモデルを一旦登録解除
@@ -271,20 +279,20 @@ class OpenAIAPIKeyAdmin(admin.ModelAdmin):
     """OpenAI APIキー管理画面"""
     
     # 一覧表示
-    list_display = ['name', 'purpose', 'masked_key_display', 'is_default', 'is_active', 'status_icon', 'created_at', 'updated_at', 'edit_link']
-    list_filter = ['purpose', 'is_active', 'is_default', 'created_at']
-    search_fields = ['name', 'description']
+    list_display = ['name', 'purpose', 'model_name', 'masked_key_display', 'is_default', 'is_active', 'status_icon', 'created_at', 'updated_at', 'test_connection_link', 'edit_link']
+    list_filter = ['purpose', 'model_name', 'is_active', 'is_default', 'created_at']
+    search_fields = ['name', 'description', 'model_name']
     ordering = ['-is_default', '-is_active', '-created_at']
     list_editable = ['is_default', 'is_active']  # 一覧画面で直接編集可能
-    actions = ['activate_keys', 'deactivate_keys', 'duplicate_key']  # カスタムアクション
+    actions = ['activate_keys', 'deactivate_keys', 'duplicate_key', 'test_api_keys']  # カスタムアクション
     
     # 詳細ページのフィールドセット
     fieldsets = (
         ('基本情報', {
             'fields': ('name', 'purpose', 'description')
         }),
-        ('APIキー', {
-            'fields': ('api_key',),
+        ('APIキー設定', {
+            'fields': ('api_key', 'model_name', 'test_result_display', 'test_chat_display'),
             'description': '⚠️ APIキーは慎重に扱ってください。外部に漏らさないよう注意してください。'
         }),
         ('設定', {
@@ -296,7 +304,7 @@ class OpenAIAPIKeyAdmin(admin.ModelAdmin):
         }),
     )
     
-    readonly_fields = ['created_at', 'updated_at']
+    readonly_fields = ['created_at', 'updated_at', 'test_result_display', 'test_chat_display']
     
     # 新規作成時のフィールドセット
     add_fieldsets = (
@@ -353,6 +361,16 @@ class OpenAIAPIKeyAdmin(admin.ModelAdmin):
         
         return form
     
+    def test_connection_link(self, obj):
+        """疎通テストリンク"""
+        from django.utils.safestring import mark_safe
+        return mark_safe(
+            f'<a href="#" onclick="testAPIKey(\'{obj.id}\'); return false;" '
+            f'style="color: #417690; text-decoration: none; cursor: pointer;" '
+            f'id="test-link-{obj.id}">🔌 疎通テスト</a>'
+        )
+    test_connection_link.short_description = '接続テスト'
+    
     def edit_link(self, obj):
         """編集リンク"""
         from django.urls import reverse
@@ -360,6 +378,43 @@ class OpenAIAPIKeyAdmin(admin.ModelAdmin):
         url = reverse('admin:spin_openaiapikey_change', args=[obj.id])
         return mark_safe(f'<a href="{url}" style="color: #417690; text-decoration: none;">✎ 編集</a>')
     edit_link.short_description = '操作'
+    
+    def test_result_display(self, obj):
+        """疎通テスト結果表示エリア"""
+        from django.utils.safestring import mark_safe
+        return mark_safe(
+            f'<div id="test-result-{obj.id}" style="margin-top: 10px;">'
+            f'<button type="button" onclick="testAPIKeyDetail(\'{obj.id}\')" '
+            f'style="padding: 8px 16px; background: #417690; color: white; border: none; '
+            f'border-radius: 4px; cursor: pointer; font-size: 14px;">🔌 疎通テストを実行</button>'
+            f'<div id="test-status-{obj.id}" style="margin-top: 10px;"></div>'
+            f'</div>'
+        )
+    test_result_display.short_description = '疎通テスト'
+    
+    def test_chat_display(self, obj):
+        """テストチャット表示エリア"""
+        from django.utils.safestring import mark_safe
+        return mark_safe(
+            f'<div id="test-chat-{obj.id}" style="margin-top: 20px; border: 1px solid #ddd; border-radius: 4px; padding: 15px; background: #f9f9f9;">'
+            f'<h3 style="margin-top: 0; color: #333;">💬 テストチャット</h3>'
+            f'<p style="color: #666; font-size: 13px;">このAPIキーとモデルを使用して実際にチャットをテストできます。</p>'
+            f'<div id="chat-history-{obj.id}" style="max-height: 400px; overflow-y: auto; background: white; border: 1px solid #ddd; border-radius: 4px; padding: 10px; margin-bottom: 10px; min-height: 200px;"></div>'
+            f'<div style="display: flex; gap: 10px;">'
+            f'<textarea id="chat-input-{obj.id}" placeholder="メッセージを入力してください..." '
+            f'style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; resize: vertical; min-height: 60px; font-family: inherit;"></textarea>'
+            f'<button type="button" onclick="sendTestMessage(\'{obj.id}\')" '
+            f'style="padding: 10px 20px; background: #417690; color: white; border: none; '
+            f'border-radius: 4px; cursor: pointer; font-size: 14px; white-space: nowrap;">送信</button>'
+            f'</div>'
+            f'<div style="margin-top: 10px;">'
+            f'<button type="button" onclick="clearChatHistory(\'{obj.id}\')" '
+            f'style="padding: 6px 12px; background: #999; color: white; border: none; '
+            f'border-radius: 4px; cursor: pointer; font-size: 12px;">履歴をクリア</button>'
+            f'</div>'
+            f'</div>'
+        )
+    test_chat_display.short_description = 'テストチャット'
     
     def save_model(self, request, obj, form, change):
         """保存時の処理"""
@@ -414,4 +469,203 @@ class OpenAIAPIKeyAdmin(admin.ModelAdmin):
             description=f"[複製] {original.description or ''}"
         )
         self.message_user(request, f'APIキー "{duplicate.name}" を複製しました。（無効状態）', level='success')
+    
+    @admin.action(description='選択したAPIキーの疎通テストを実行')
+    def test_api_keys(self, request, queryset):
+        """選択したAPIキーの疎通テストを実行"""
+        results = []
+        for api_key_obj in queryset:
+            result = self._test_single_api_key(api_key_obj)
+            results.append(f"{api_key_obj.name}: {result['status']} - {result['message']}")
+        
+        message = "\n".join(results)
+        self.message_user(request, f"疎通テスト結果:\n{message}", level='info')
+    
+    def _test_single_api_key(self, api_key_obj):
+        """単一のAPIキーをテスト"""
+        try:
+            client = openai.OpenAI(api_key=api_key_obj.api_key)
+            
+            # 設定されたモデルでテスト
+            response = client.chat.completions.create(
+                model=api_key_obj.model_name,
+                messages=[
+                    {"role": "user", "content": "Hello"}
+                ],
+                max_tokens=5
+            )
+            
+            return {
+                'status': '✓ 成功',
+                'message': f'接続成功（モデル: {response.model}）',
+                'success': True
+            }
+        except openai.AuthenticationError:
+            return {
+                'status': '✗ 認証エラー',
+                'message': 'APIキーが無効です',
+                'success': False
+            }
+        except openai.RateLimitError:
+            return {
+                'status': '⚠ レート制限',
+                'message': 'レート制限に達しています',
+                'success': False
+            }
+        except openai.APIConnectionError:
+            return {
+                'status': '✗ 接続エラー',
+                'message': 'OpenAI APIに接続できません',
+                'success': False
+            }
+        except Exception as e:
+            logger.error(f"API Key test failed: {str(e)}")
+            return {
+                'status': '✗ エラー',
+                'message': str(e),
+                'success': False
+            }
+    
+    def get_urls(self):
+        """カスタムURLを追加"""
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'test-api-key/<uuid:key_id>/',
+                self.admin_site.admin_view(self.test_api_key_view),
+                name='spin_openaiapikey_test',
+            ),
+            path(
+                'test-chat/<uuid:key_id>/',
+                self.admin_site.admin_view(self.test_chat_view),
+                name='spin_openaiapikey_test_chat',
+            ),
+        ]
+        return custom_urls + urls
+    
+    def test_api_key_view(self, request, key_id):
+        """APIキー疎通テストのビュー"""
+        try:
+            api_key_obj = OpenAIAPIKey.objects.get(id=key_id)
+            result = self._test_single_api_key(api_key_obj)
+            
+            return JsonResponse({
+                'success': result['success'],
+                'status': result['status'],
+                'message': result['message'],
+                'key_name': api_key_obj.name
+            })
+        except OpenAIAPIKey.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'status': '✗ エラー',
+                'message': 'APIキーが見つかりません'
+            }, status=404)
+        except Exception as e:
+            logger.error(f"Test API key view error: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'status': '✗ エラー',
+                'message': str(e)
+            }, status=500)
+    
+    def test_chat_view(self, request, key_id):
+        """テストチャットのビュー"""
+        import json
+        
+        if request.method != 'POST':
+            return JsonResponse({
+                'success': False,
+                'message': 'POSTメソッドのみサポートしています'
+            }, status=405)
+        
+        try:
+            api_key_obj = OpenAIAPIKey.objects.get(id=key_id)
+            
+            # リクエストボディからメッセージと会話履歴を取得
+            body = json.loads(request.body)
+            user_message = body.get('message', '')
+            chat_history = body.get('history', [])
+            
+            if not user_message:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'メッセージが空です'
+                }, status=400)
+            
+            # OpenAIクライアントを作成
+            client = openai.OpenAI(api_key=api_key_obj.api_key)
+            
+            # 会話履歴を構築
+            messages = []
+            for msg in chat_history:
+                messages.append({
+                    'role': msg['role'],
+                    'content': msg['content']
+                })
+            
+            # ユーザーメッセージを追加
+            messages.append({
+                'role': 'user',
+                'content': user_message
+            })
+            
+            # OpenAI APIを呼び出し
+            response = client.chat.completions.create(
+                model=api_key_obj.model_name,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=500
+            )
+            
+            assistant_message = response.choices[0].message.content
+            
+            logger.info(f"テストチャット成功: key={api_key_obj.name}, model={api_key_obj.model_name}")
+            
+            return JsonResponse({
+                'success': True,
+                'message': assistant_message,
+                'model': response.model,
+                'usage': {
+                    'prompt_tokens': response.usage.prompt_tokens,
+                    'completion_tokens': response.usage.completion_tokens,
+                    'total_tokens': response.usage.total_tokens
+                }
+            })
+            
+        except OpenAIAPIKey.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'message': 'APIキーが見つかりません'
+            }, status=404)
+        except openai.AuthenticationError:
+            return JsonResponse({
+                'success': False,
+                'message': 'APIキーが無効です'
+            }, status=401)
+        except openai.RateLimitError:
+            return JsonResponse({
+                'success': False,
+                'message': 'レート制限に達しています'
+            }, status=429)
+        except openai.APIConnectionError:
+            return JsonResponse({
+                'success': False,
+                'message': 'OpenAI APIに接続できません'
+            }, status=503)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'message': 'リクエストボディが不正です'
+            }, status=400)
+        except Exception as e:
+            logger.error(f"テストチャットエラー: {str(e)}", exc_info=True)
+            return JsonResponse({
+                'success': False,
+                'message': f'エラーが発生しました: {str(e)}'
+            }, status=500)
+    
+    class Media:
+        """管理画面用のJavaScript追加"""
+        js = ('admin/js/api_key_test.js',)
 

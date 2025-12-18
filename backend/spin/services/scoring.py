@@ -4,24 +4,33 @@
 import os
 import logging
 from openai import OpenAI
-from ..utils import get_openai_api_key
+from spin.services.api_key_manager import APIKeyManager
 
 logger = logging.getLogger(__name__)
 
-
-def get_client():
-    """OpenAIクライアントを取得（スコアリング用）"""
-    try:
-        api_key = get_openai_api_key(purpose='scoring')
-        return OpenAI(api_key=api_key)
-    except Exception as e:
-        logger.error(f"OpenAIクライアント取得エラー: Error: {str(e)}")
-        return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+def get_openai_client_for_scoring():
+    """スコアリング用のOpenAIクライアントを取得"""
+    api_key, model_name = APIKeyManager.get_api_key_and_model('scoring')
+    
+    if not api_key:
+        api_key = os.getenv("OPENAI_API_KEY")
+        model_name = "gpt-4o-mini"
+        if api_key:
+            logger.warning("環境変数からAPIキーを取得しました（scoring）。データベースにAPIキーを登録することを推奨します。")
+    
+    if not api_key:
+        raise ValueError("OpenAI APIキーが見つかりません（scoring）。管理画面からAPIキーを登録してください。")
+    
+    client = OpenAI(api_key=api_key)
+    return client, model_name
 
 
 def score_conversation(session, conversation_history):
     """会話履歴を分析してスコアリングを実行"""
     logger.info(f"スコアリング開始: Session {session.id}, mode={session.mode}, メッセージ数: {len(conversation_history)}")
+    
+    # スコアリング用のAPIキーとモデルを取得
+    client, model_name = get_openai_client_for_scoring()
     # 会話履歴をテキスト形式に変換
     conversation_text = ""
     for msg in conversation_history:
@@ -173,9 +182,8 @@ def score_conversation(session, conversation_history):
 """
     
     try:
-        client = get_client()
         res = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model_name,
             messages=[
                 {"role": "system", "content": "あなたは営業スキル評価の専門家です。必ずJSON形式で回答してください。"},
                 {"role": "user", "content": prompt},
@@ -184,7 +192,7 @@ def score_conversation(session, conversation_history):
             temperature=0.7,
         )
         response_content = res.choices[0].message.content
-        logger.info(f"スコアリング完了: Session {session.id}, mode={session.mode}")
+        logger.info(f"スコアリング完了: Session {session.id}, mode={session.mode}, model={model_name}")
         return response_content
     except Exception as e:
         logger.error(f"スコアリングエラー: Session {session.id}, Error: {str(e)}", exc_info=True)

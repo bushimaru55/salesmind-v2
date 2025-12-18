@@ -19,5 +19,6 @@ COPY . .
 EXPOSE 8000
 
 # デフォルトコマンド（docker-compose.ymlで上書き可能）
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Cloud Run でも利用できるよう gunicorn を使用
+CMD ["gunicorn", "salesmind.wsgi:application", "--bind", "0.0.0.0:${PORT:-8000}"]
 

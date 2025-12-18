@@ -8,12 +8,20 @@
 
 ### 1. 環境変数の設定
 
-`backend/.env`ファイルに以下を追加（既にある場合は更新）：
+ローカル開発では **プロジェクトルートの`.env`のみ** を使用します（`backend/.env`は廃止）。
+
+1. テンプレートファイルから`.env`を作成します。
+
+```bash
+cp .env.example .env
+```
+
+2. 作成した`.env`ファイルを編集し、少なくとも以下を設定します。
 
 ```env
-USE_SQLITE=True
 DEBUG=True
-SECRET_KEY="wj)$ge1u)hx#133eh#b!z7c*+n4i$ix%6o#hq%ufc9pqe_s@g="
+USE_SQLITE=True
+SECRET_KEY=dev-secret-key      # 開発用。必要に応じて変更してください。
 OPENAI_API_KEY=your-openai-api-key-here
 ```
 

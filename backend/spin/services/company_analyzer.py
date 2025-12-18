@@ -6,20 +6,27 @@ import logging
 import os
 import json
 from openai import OpenAI
-from typing import Dict, Any
-from ..utils import get_openai_api_key
+from typing import Dict, Any, Tuple
+from spin.services.api_key_manager import APIKeyManager
 
 logger = logging.getLogger(__name__)
 
 
-def get_client():
-    """OpenAIクライアントを取得（スクレイピング分析用）"""
-    try:
-        api_key = get_openai_api_key(purpose='scraping_analysis')
-        return OpenAI(api_key=api_key)
-    except Exception as e:
-        logger.error(f"OpenAIクライアント取得エラー: Error: {str(e)}")
-        return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+def get_client_and_model() -> Tuple[OpenAI, str]:
+    """OpenAIクライアントとモデル名を取得（スクレイピング分析用）"""
+    api_key, model_name = APIKeyManager.get_api_key_and_model('scraping_analysis')
+    
+    if not api_key:
+        api_key = os.getenv("OPENAI_API_KEY")
+        model_name = "gpt-4o-mini"
+        if api_key:
+            logger.warning("環境変数からAPIキーを取得しました（scraping_analysis）。データベースにAPIキーを登録することを推奨します。")
+    
+    if not api_key:
+        raise ValueError("OpenAI APIキーが見つかりません（scraping_analysis）。管理画面からAPIキーを登録してください。")
+    
+    client = OpenAI(api_key=api_key)
+    return client, model_name
 
 
 def analyze_spin_suitability(company_info: Dict[str, Any], value_proposition: str) -> Dict[str, Any]:
@@ -104,9 +111,9 @@ def analyze_spin_suitability(company_info: Dict[str, Any], value_proposition: st
 """
     
     try:
-        client = get_client()
+        client, model_name = get_client_and_model()
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model_name,
             messages=[
                 {"role": "system", "content": "あなたは営業提案の専門家です。必ずJSON形式で回答してください。"},
                 {"role": "user", "content": prompt},
@@ -118,7 +125,7 @@ def analyze_spin_suitability(company_info: Dict[str, Any], value_proposition: st
         response_content = response.choices[0].message.content
         analysis_result = json.loads(response_content)
         
-        logger.info(f"SPIN適合性分析が完了: 企業={company_info.get('company_name', 'Unknown')}")
+        logger.info(f"SPIN適合性分析が完了: 企業={company_info.get('company_name', 'Unknown')}, model={model_name}")
         return analysis_result
     
     except json.JSONDecodeError as e:

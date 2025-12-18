@@ -3,12 +3,12 @@
    ==================================== */
 
 :root {
-    --primary: #667eea;
-    --primary-dark: #5a67d8;
-    --secondary: #764ba2;
-    --accent: #f6ad55;
-    --dark: #1a1a2e;
-    --dark-light: #16213e;
+    --primary: #132131;
+    --primary-dark: #0a1219;
+    --secondary: #1e2f3f;
+    --accent: #4a90e2;
+    --dark: #132131;
+    --dark-light: #1e2f3f;
     --text: #333;
     --text-light: #666;
     --text-muted: #999;
@@ -16,8 +16,8 @@
     --gray-50: #f9fafb;
     --gray-100: #f3f4f6;
     --gray-200: #e5e7eb;
-    --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --gradient-dark: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+    --gradient-primary: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
+    --gradient-dark: linear-gradient(180deg, #132131 0%, #1e2f3f 100%);
     --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.16);
@@ -53,32 +53,67 @@ body {
     z-index: 1000;
     padding: 16px 0;
     transition: all 0.3s ease;
+    background: #132131; /* ロゴの背景色と完全に統一 */
 }
 
 .nav.scrolled {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
+    background: #132131; /* スクロール時もロゴの背景色を維持 */
     box-shadow: var(--shadow-sm);
     padding: 12px 0;
 }
 
 .nav-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 24px;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
 
+.nav-logo {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    z-index: 1001;
+    padding-left: 24px; /* 左端から適度なパディング */
+    border: none; /* ボーダーを削除 */
+    outline: none; /* アウトラインを削除 */
+}
+
+.nav-logo a {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    transition: opacity 0.3s;
+    height: auto;
+    border: none; /* ボーダーを削除 */
+    outline: none; /* アウトラインを削除 */
+}
+
+.nav-logo a:hover {
+    opacity: 0.8;
+}
+
+.nav-logo a:focus {
+    outline: none; /* フォーカス時のアウトラインを削除 */
+}
+
 .nav-logo-img {
-    height: 40px;
+    height: 100px;
     width: auto;
+    display: block;
+    max-width: 300px;
+    object-fit: contain;
+    border: none; /* ボーダーを削除 */
+    outline: none; /* アウトラインを削除 */
 }
 
 .nav-links {
     display: flex;
     gap: 32px;
+    margin-left: auto; /* 右側に配置 */
+    margin-right: 24px;
 }
 
 .nav-links a {
@@ -101,6 +136,7 @@ body {
     display: flex;
     gap: 12px;
     align-items: center;
+    padding-right: 24px; /* 右端に余白 */
 }
 
 .btn-nav-login {
@@ -403,7 +439,7 @@ body {
 }
 
 .mockup-header {
-    background: var(--gradient-primary);
+    background: #2d3561; /* 元の濃いダークブルーに戻す */
     padding: 12px 16px;
     display: flex;
     align-items: center;

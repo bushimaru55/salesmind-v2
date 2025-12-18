@@ -71,7 +71,7 @@
 }
 
 .mode-select-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
     color: white;
     border: none;
     padding: 12px 30px;
@@ -108,7 +108,7 @@
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
     min-height: 100vh;
     padding: 20px;
 }
@@ -123,7 +123,7 @@ body {
 }
 
 .header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
     color: white;
     padding: 30px;
     text-align: center;
@@ -312,7 +312,7 @@ body {
 
 .btn-primary {
     padding: 12px 30px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
     color: white;
     border: none;
     border-radius: 6px;
@@ -457,13 +457,13 @@ body {
 
 /* 商談成功率パネル（詳細診断モード用） */
 .success-meter {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: 2px solid #667eea;
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
+    border: 2px solid #132131;
     border-radius: 12px;
     padding: 20px;
     margin-bottom: 20px;
     color: white;
-    box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 6px rgba(19, 33, 49, 0.3);
 }
 
 .success-meter-header {
@@ -647,7 +647,7 @@ body {
 }
 
 .message.salesperson {
-    background: #667eea;
+    background: #132131;
     color: white;
     margin-left: auto;
     text-align: right;
@@ -1050,7 +1050,7 @@ body {
 }
 
 .ranking-table thead {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
     color: white;
 }
 
@@ -1154,6 +1154,191 @@ body {
     font-size: 1.1em;
 }
 
+/* クロージング提案スタイル */
+.closing-proposal {
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 15px 0;
+    box-shadow: 0 4px 8px rgba(19, 33, 49, 0.3);
+    animation: slideIn 0.3s ease-out;
+}
+
+.closing-proposal-header {
+    font-size: 1.1em;
+    font-weight: bold;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.closing-proposal-content {
+    font-size: 1em;
+    line-height: 1.6;
+}
+
+.closing-proposal-content p {
+    margin: 8px 0;
+}
+
+.closing-proposal-content strong {
+    font-size: 1.1em;
+    display: block;
+    margin-bottom: 5px;
+}
+
+/* クロージングフェーズインジケーター */
+.closing-phase-indicator {
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    color: #856404;
+    padding: 12px 20px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    font-weight: bold;
+    text-align: center;
+    animation: pulse 2s infinite;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+/* 温度スコア表示スタイル */
+.temperature-icon {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 1.2em;
+    font-weight: bold;
+}
+
+.temperature-icon.temp-up {
+    color: #28a745;
+}
+
+.temperature-icon.temp-down {
+    color: #dc3545;
+}
+
+.temperature-icon.temp-same {
+    color: #6c757d;
+}
+
+.temperature-score-panel {
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 15px;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+.temperature-gauge-container {
+    flex-shrink: 0;
+    text-align: center;
+}
+
+.temperature-gauge-label {
+    font-size: 0.9em;
+    color: #666;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+.temperature-gauge {
+    width: 120px;
+    height: 120px;
+}
+
+.gauge-svg {
+    width: 100%;
+    height: 100%;
+}
+
+.gauge-text {
+    font-size: 24px;
+    font-weight: bold;
+    fill: #667eea;
+}
+
+.temperature-chart-container {
+    flex: 1;
+    height: 100px;
+}
+
+.temperature-chart-container canvas {
+    width: 100%;
+    height: 100%;
+}
+
+/* 失注（Loss Case）スタイル */
+.loss-response {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 15px 0;
+    box-shadow: 0 4px 8px rgba(245, 87, 108, 0.3);
+    animation: slideIn 0.3s ease-out;
+}
+
+.loss-response-header {
+    font-size: 1.1em;
+    font-weight: bold;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.loss-response-content {
+    font-size: 1em;
+    line-height: 1.6;
+}
+
+.loss-response-content p {
+    margin: 8px 0;
+}
+
+.loss-response-content strong {
+    font-size: 1.05em;
+    display: inline-block;
+    margin-right: 5px;
+}
+
+/* 失注フェーズインジケーター */
+.loss-phase-indicator {
+    background: #f8d7da;
+    border: 2px solid #dc3545;
+    color: #721c24;
+    padding: 12px 20px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    font-weight: bold;
+    text-align: center;
+    animation: pulse 2s infinite;
+}
+
 @media (max-width: 768px) {
     .ranking-table {
         font-size: 0.9em;
@@ -1206,7 +1391,7 @@ body {
     width: 60px;
     height: 60px;
     border-radius: 12px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1462,7 +1647,7 @@ body {
 
 .chat-header {
     padding: 15px 20px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
     color: white;
     border-radius: 8px 8px 0 0;
     margin-bottom: 0;
@@ -1490,8 +1675,8 @@ body {
 
 /* 成功率パネルサイドバー */
 .success-meter-sidebar {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: 2px solid #667eea;
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
+    border: 2px solid #132131;
     border-radius: 8px;
     padding: 15px;
     color: white;
@@ -1605,9 +1790,9 @@ body {
 }
 
 .sidebar-item.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
     color: white;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 15px rgba(19, 33, 49, 0.4);
 }
 
 /* ツールチップ */
@@ -1731,7 +1916,7 @@ body {
 
 /* ヘッダー調整（サイドバー付きレイアウト用） */
 .header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
     color: white;
     padding: 15px 30px;
     display: flex;

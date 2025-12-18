@@ -36,3 +36,5 @@ print(f'ユーザー名: {username}')
 print(f'パスワード: {password}')
 print(f'メール: {email}')
 
+
+

@@ -1,41 +1,44 @@
 import os
 import logging
 from openai import OpenAI
-from ..utils import get_openai_api_key
+from spin.services.api_key_manager import APIKeyManager
 
 logger = logging.getLogger(__name__)
 
-# 遅延初期化のためにclientをグローバル変数として定義
-_client = None
-
-
-def get_client(purpose='general'):
+# 後方互換性のため、環境変数からのAPIキー取得もサポート
+def get_openai_client(purpose='general'):
     """
-    OpenAIクライアントを取得（用途別APIキー対応）
+    用途に応じたOpenAIクライアントを取得
     
     Args:
-        purpose (str): APIキーの用途
-            - 'spin_generation': SPIN質問生成
-            - 'chat': チャット（顧客役）
-            - 'scoring': スコアリング
-            - 'scraping_analysis': スクレイピング分析
-            - 'general': 汎用
+        purpose: APIキーの用途 ('spin_generation', 'chat', 'scoring', 'scraping_analysis', 'general')
     
     Returns:
-        OpenAI: OpenAIクライアント
+        tuple: (OpenAI client, model_name)
     """
-    try:
-        api_key = get_openai_api_key(purpose=purpose)
-        return OpenAI(api_key=api_key)
-    except Exception as e:
-        logger.error(f"OpenAIクライアント取得エラー: purpose={purpose}, Error: {str(e)}")
-        # フォールバック: 環境変数から取得
-        return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    # まずデータベースからAPIキーを取得
+    api_key, model_name = APIKeyManager.get_api_key_and_model(purpose)
+    
+    # データベースにない場合は環境変数から取得（後方互換性）
+    if not api_key:
+        api_key = os.getenv("OPENAI_API_KEY")
+        model_name = "gpt-4o-mini"  # デフォルトモデル
+        if api_key:
+            logger.warning(f"環境変数からAPIキーを取得しました（purpose={purpose}）。データベースにAPIキーを登録することを推奨します。")
+    
+    if not api_key:
+        raise ValueError(f"OpenAI APIキーが見つかりません（purpose={purpose}）。管理画面からAPIキーを登録してください。")
+    
+    client = OpenAI(api_key=api_key)
+    return client, model_name
 
 
 def generate_customer_response(session, conversation_history):
     """顧客ロールプレイ用の応答を生成"""
     logger.info(f"AI顧客応答生成を開始: Session {session.id}, mode={session.mode}")
+    
+    # チャット用のAPIキーとモデルを取得
+    client, model_name = get_openai_client('chat')
     
     # 企業情報を取得（詳細診断モードの場合）
     company_info_text = ""
@@ -277,23 +280,25 @@ def generate_customer_response(session, conversation_history):
             messages.append({"role": "assistant", "content": msg.message})
     
     try:
-        client = get_client(purpose='chat')
         res = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model_name,
             messages=messages,
             temperature=0.8,
         )
         response_content = res.choices[0].message.content
-        logger.info(f"AI顧客応答生成が完了: Session {session.id}, mode={session.mode}, 応答長: {len(response_content)}文字")
+        logger.info(f"AI顧客応答生成が完了: Session {session.id}, mode={session.mode}, model={model_name}, 応答長: {len(response_content)}文字")
         return response_content
     except Exception as e:
-        logger.error(f"AI顧客応答生成エラー: Session {session.id}, Error: {str(e)}", exc_info=True)
+        logger.error(f"AI顧客応答生成エラー: Session {session.id}, model={model_name}, Error: {str(e)}", exc_info=True)
         raise
 
 
 def generate_spin(industry, value_prop, persona=None, pain=None):
     """SPIN質問を生成する"""
     logger.info(f"SPIN質問生成を開始: Industry={industry}, ValueProp={value_prop[:50]}...")
+    
+    # SPIN質問生成用のAPIキーとモデルを取得
+    client, model_name = get_openai_client('spin_generation')
     prompt = f"""
 あなたはB2B営業コーチです。以下の情報を基に、SPIN思考に基づいた営業質問を生成してください。
 
@@ -318,9 +323,8 @@ SPIN各要素（Situation, Problem, Implication, Need）ごとに、実際の商
 }
 """
     try:
-        client = get_client(purpose='spin_generation')
         res = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model_name,
             messages=[
                 {"role": "system", "content": "あなたは営業コーチAIです。必ずJSON形式で回答してください。"},
                 {"role": "user", "content": prompt},
@@ -329,9 +333,9 @@ SPIN各要素（Situation, Problem, Implication, Need）ごとに、実際の商
             temperature=0.7,
         )
         response_content = res.choices[0].message.content
-        logger.info(f"SPIN質問生成が完了: Industry={industry}")
+        logger.info(f"SPIN質問生成が完了: Industry={industry}, model={model_name}")
         return response_content
     except Exception as e:
-        logger.error(f"SPIN質問生成エラー: Industry={industry}, Error: {str(e)}", exc_info=True)
+        logger.error(f"SPIN質問生成エラー: Industry={industry}, model={model_name}, Error: {str(e)}", exc_info=True)
         raise
 

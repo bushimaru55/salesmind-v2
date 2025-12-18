@@ -16,7 +16,9 @@
     <nav class="nav">
         <div class="nav-container">
             <div class="nav-logo">
-                <img src="images/logo.png" alt="MindBridge" class="nav-logo-img">
+                <a href="#" onclick="window.scrollTo({top: 0, behavior: 'smooth'}); return false;">
+                    <img src="images/logo.png" alt="MindBridge" class="nav-logo-img" onerror="console.error('ロゴ画像の読み込みに失敗しました'); this.style.display='none';">
+                </a>
             </div>
             <div class="nav-links">
                 <a href="#features">機能</a>
@@ -126,7 +128,7 @@
     <!-- ロゴセクション -->
     <section class="logo-section">
         <div class="logo-container">
-            <img src="images/logo_big.PNG" alt="MindBridge" class="company-logo-big">
+            <img src="./images/logo_big.PNG" alt="MindBridge" class="company-logo-big" onerror="this.onerror=null; this.src='images/logo_big.PNG';">
             <p class="logo-tagline">MindBridge が提供する営業トレーニングプラットフォーム</p>
         </div>
     </section>
@@ -430,7 +432,7 @@
         <div class="footer-container">
             <div class="footer-main">
                 <div class="footer-brand">
-                    <img src="images/logo.png" alt="MindBridge" class="footer-logo">
+                    <img src="./images/logo.png" alt="MindBridge" class="footer-logo" onerror="this.onerror=null; this.src='images/logo.png';">
                     <p>MindBridge が提供する<br>AI営業トレーニングプラットフォーム</p>
                 </div>
                 <div class="footer-links">

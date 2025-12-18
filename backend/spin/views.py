@@ -46,6 +46,19 @@ from .exceptions import OpenAIAPIError, SessionNotFoundError, SessionFinishedErr
 logger = logging.getLogger(__name__)
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def health(request):
+    """
+    シンプルなヘルスチェックエンドポイント。
+
+    - URL: /api/health
+    - Method: GET
+    - Response: {"status": "ok"}
+    """
+    return Response({"status": "ok"}, status=status.HTTP_200_OK)
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_user(request):

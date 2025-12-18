@@ -4,20 +4,26 @@ import os
 from typing import Dict, List
 
 from openai import OpenAI
-from ..utils import get_openai_api_key
+from spin.services.api_key_manager import APIKeyManager
 
 
 logger = logging.getLogger(__name__)
 
-
-def get_client():
-    """OpenAIクライアントを取得（会話分析用）"""
-    try:
-        api_key = get_openai_api_key(purpose='chat')
-        return OpenAI(api_key=api_key)
-    except Exception as e:
-        logger.error(f"OpenAIクライアント取得エラー: Error: {str(e)}")
-        return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+def get_openai_client_for_analysis():
+    """会話分析用のOpenAIクライアントを取得"""
+    api_key, model_name = APIKeyManager.get_api_key_and_model('scoring')
+    
+    if not api_key:
+        api_key = os.getenv("OPENAI_API_KEY")
+        model_name = "gpt-4o-mini"
+        if api_key:
+            logger.warning("環境変数からAPIキーを取得しました（conversation_analysis）。データベースにAPIキーを登録することを推奨します。")
+    
+    if not api_key:
+        raise ValueError("OpenAI APIキーが見つかりません（conversation_analysis）。管理画面からAPIキーを登録してください。")
+    
+    client = OpenAI(api_key=api_key)
+    return client, model_name
 
 
 def _format_conversation(messages: List[Dict[str, str]], limit: int = 10) -> str:
@@ -34,6 +40,9 @@ def _format_conversation(messages: List[Dict[str, str]], limit: int = 10) -> str
 def analyze_sales_message(session, conversation_history, latest_message: str) -> Dict[str, any]:
     """営業メッセージを分析し、成功率変動を算出"""
     logger.info(f"会話分析開始: Session {session.id}, 現在の成功率={session.success_probability}%")
+    
+    # 会話分析用のAPIキーとモデルを取得
+    client, model_name = get_openai_client_for_analysis()
     
     logger.info(
         "会話分析入力: session=%s, current_probability=%s, history_count=%s, latest_message_length=%s",
@@ -175,9 +184,8 @@ success_deltaは-5〜5の整数で、プラスは成功率を上げる要素、�
 """
 
     try:
-        client = get_client()
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model_name,
             messages=[
                 {
                     "role": "system",
@@ -208,7 +216,7 @@ success_deltaは-5〜5の整数で、プラスは成功率を上げる要素、�
         normalized_step = step_appropriateness if step_appropriateness in valid_step_values else "unknown"
 
         logger.info(
-            "会話分析結果: delta=%s, stage_raw=%s, stage=%s, message_raw=%s, message=%s, step_raw=%s, step=%s",
+            "会話分析結果: delta=%s, stage_raw=%s, stage=%s, message_raw=%s, message=%s, step_raw=%s, step=%s, model=%s",
             success_delta,
             current_stage,
             normalized_stage,
@@ -216,6 +224,7 @@ success_deltaは-5〜5の整数で、プラスは成功率を上げる要素、�
             normalized_message_stage,
             step_appropriateness,
             normalized_step,
+            model_name,
         )
 
         return {

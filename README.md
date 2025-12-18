@@ -28,13 +28,14 @@ cd salesmind
 
 2. **環境変数ファイルを作成**
 ```bash
-# .env.exampleをコピーして.envを作成
+# プロジェクトルートの .env.example をコピーして .env を作成
 cp .env.example .env
 
-# .envファイルを編集して以下を設定：
+# .envファイルを編集して以下を設定（例）：
+# - DEBUG, USE_SQLITE
 # - SECRET_KEY: Djangoのシークレットキー（本番環境では必ず変更）
 # - OPENAI_API_KEY: OpenAI APIキー（必須）
-# - USE_SQLITE: False（Docker環境ではPostgreSQLを使用）
+# - POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_HOST / POSTGRES_PORT
 ```
 
 3. **Docker Composeでビルド・起動**
@@ -62,9 +63,10 @@ docker compose exec web python manage.py createsuperuser
 
 ローカル開発時のみ、SQLiteを使用することも可能です。
 
-`.env`ファイルに以下を追加：
-```
+`.env`ファイルで以下を設定します（プロジェクトルートの`.env`のみを使用し、`backend/.env`は使用しません）：
+```env
 USE_SQLITE=True
+DEBUG=True
 ```
 
 その後、通常のDjango開発サーバーを起動：
