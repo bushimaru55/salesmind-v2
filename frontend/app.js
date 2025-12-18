@@ -1303,7 +1303,14 @@ async function sendChatMessage() {
                 }
             }
         } else {
-            showChatError('メッセージ送信に失敗しました: ' + (data.message || data.error));
+            // 有償プランへの誘導が必要な場合
+            if (data.upgrade_required) {
+                const upgradeMessage = data.error || data.message || '有償プランであればさらにご利用頂けます';
+                const landingUrl = data.landing_page_url || '/landing.html';
+                showChatUpgradeMessage(upgradeMessage, landingUrl);
+            } else {
+                showChatError('メッセージ送信に失敗しました: ' + (data.message || data.error));
+            }
         }
     } catch (error) {
         showChatError('エラー: ' + error.message);
@@ -2090,6 +2097,24 @@ function showChatLoading() {
 // チャットエラー表示
 function showChatError(message) {
     addChatMessage('customer', `[エラー] ${message}`);
+}
+
+// 有償プランへの誘導メッセージを表示
+function showChatUpgradeMessage(message, landingUrl) {
+    const container = document.getElementById('chatMessages');
+    if (!container) return;
+    
+    const upgradeDiv = document.createElement('div');
+    upgradeDiv.className = 'upgrade-message';
+    upgradeDiv.innerHTML = `
+        <div class="upgrade-content">
+            <p class="upgrade-text">${message}</p>
+            <a href="${landingUrl}" class="upgrade-button" target="_blank">ランディングページへ</a>
+        </div>
+    `;
+    
+    container.appendChild(upgradeDiv);
+    container.scrollTop = container.scrollHeight;
 }
 
 // クロージング提案を表示

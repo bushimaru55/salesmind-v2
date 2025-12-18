@@ -289,20 +289,46 @@ def chat_session(request):
         customer_response = generate_customer_response(session, conversation_history)
     except ValueError as e:
         # コンテキスト長超過などの明確なエラー
-        logger.error(f"チャット送信エラー: Session {session_id}, Error: {str(e)}")
+        error_message = str(e)
+        logger.error(f"チャット送信エラー: Session {session_id}, Error: {error_message}")
+        
+        # 簡易診断モードの場合、有償プランへの誘導メッセージを返す
+        if session.mode == 'simple' and ('会話履歴が長すぎる' in error_message or 'コンテキスト' in error_message):
+            return Response({
+                "error": "有償プランであればさらにご利用頂けます",
+                "upgrade_required": True,
+                "landing_page_url": "/landing.html",
+                "details": {
+                    "message": ["有償プランであればさらにご利用頂けます"]
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         return Response({
-            "error": str(e),
+            "error": error_message,
             "details": {
-                "message": [str(e)]
+                "message": [error_message]
             }
         }, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         # その他の予期しないエラー
-        logger.error(f"チャット送信エラー（予期しない）: Session {session_id}, Error: {str(e)}", exc_info=True)
+        error_message = str(e)
+        logger.error(f"チャット送信エラー（予期しない）: Session {session_id}, Error: {error_message}", exc_info=True)
+        
+        # 簡易診断モードの場合、コンテキスト長超過エラーの可能性をチェック
+        if session.mode == 'simple' and ('context_length' in error_message.lower() or 'maximum context length' in error_message.lower() or 'token' in error_message.lower()):
+            return Response({
+                "error": "有償プランであればさらにご利用頂けます",
+                "upgrade_required": True,
+                "landing_page_url": "/landing.html",
+                "details": {
+                    "message": ["有償プランであればさらにご利用頂けます"]
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         return Response({
             "error": "メッセージ送信に失敗しました",
             "details": {
-                "message": [f"エラーが発生しました: {str(e)}"]
+                "message": [f"エラーが発生しました: {error_message}"]
             }
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     

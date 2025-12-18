@@ -670,6 +670,45 @@ body {
     line-height: 1.5;
 }
 
+/* 有償プランへの誘導メッセージ */
+.upgrade-message {
+    margin: 20px auto;
+    max-width: 70%;
+    text-align: center;
+}
+
+.upgrade-content {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.upgrade-text {
+    font-size: 1.1em;
+    margin-bottom: 15px;
+    font-weight: 500;
+}
+
+.upgrade-button {
+    display: inline-block;
+    background: white;
+    color: #667eea;
+    padding: 12px 30px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.upgrade-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    background: #f0f0f0;
+}
+
 .chat-input-area {
     display: flex;
     gap: 10px;
