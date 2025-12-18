@@ -108,10 +108,47 @@ function returnToModeSelection() {
 // 認証状態の確認
 function checkAuth() {
     if (authToken) {
-        document.getElementById('loginForm').style.display = 'none';
-        document.getElementById('userInfo').style.display = 'block';
-        document.getElementById('usernameDisplay').textContent = localStorage.getItem('username') || 'ユーザー';
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        const authTabs = document.getElementById('authTabs');
+        const userInfo = document.getElementById('userInfo');
+        const usernameDisplay = document.getElementById('usernameDisplay');
+        
+        if (loginForm) {
+            loginForm.style.display = 'none';
+        }
+        if (registerForm) {
+            registerForm.style.display = 'none';
+        }
+        if (authTabs) {
+            authTabs.style.display = 'none';
+        }
+        if (userInfo) {
+            userInfo.style.display = 'block';
+        }
+        if (usernameDisplay) {
+            usernameDisplay.textContent = localStorage.getItem('username') || 'ユーザー';
+        }
         // Tokenが有効か確認（実際の実装ではAPIで確認）
+    } else {
+        // ログインしていない場合
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        const authTabs = document.getElementById('authTabs');
+        const userInfo = document.getElementById('userInfo');
+        
+        if (loginForm) {
+            loginForm.style.display = 'block';
+        }
+        if (registerForm) {
+            registerForm.style.display = 'none';
+        }
+        if (authTabs) {
+            authTabs.style.display = 'flex';
+        }
+        if (userInfo) {
+            userInfo.style.display = 'none';
+        }
     }
 }
 
@@ -229,7 +266,11 @@ async function login() {
     document.getElementById('loginError').style.display = 'none';
     
     try {
-        const response = await fetch(`${API_BASE_URL}/auth/login/`, {
+        const loginUrl = `${API_BASE_URL}/auth/login/`;
+        console.log('Login URL:', loginUrl);
+        console.log('Login request:', { username, password: '***' });
+        
+        const response = await fetch(loginUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -240,31 +281,77 @@ async function login() {
             })
         });
         
-        const data = await response.json();
+        console.log('Login response status:', response.status);
+        console.log('Login response headers:', response.headers);
+        
+        let data;
+        try {
+            data = await response.json();
+            console.log('Login response data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON response:', jsonError);
+            const text = await response.text();
+            console.error('Response text:', text);
+            showError('loginError', 'サーバーからの応答を解析できませんでした: ' + text);
+            return;
+        }
         
         if (response.ok) {
             // ログイン成功 - Tokenを保存
+            if (!data.token) {
+                console.error('Token not found in response:', data);
+                showError('loginError', 'トークンが取得できませんでした');
+                return;
+            }
+            
             authToken = data.token;
             localStorage.setItem('authToken', authToken);
-            localStorage.setItem('username', data.user.username);
+            if (data.user && data.user.username) {
+                localStorage.setItem('username', data.user.username);
+            }
             
+            console.log('Login successful, token saved');
             showSuccess('ログインに成功しました');
             
-            
             // ログイン状態にする
-            closeAuthModal();
+            // ログインフォームと登録フォームを非表示
+            const loginForm = document.getElementById('loginForm');
+            const registerForm = document.getElementById('registerForm');
+            const authTabs = document.getElementById('authTabs');
+            if (loginForm) {
+                loginForm.style.display = 'none';
+            }
+            if (registerForm) {
+                registerForm.style.display = 'none';
+            }
+            if (authTabs) {
+                authTabs.style.display = 'none';
+            }
+            
             checkAuth();
-            document.getElementById('userInfo').style.display = 'block';
-            document.getElementById('usernameDisplay').textContent = data.user.username;
+            const userInfoDiv = document.getElementById('userInfo');
+            const usernameDisplay = document.getElementById('usernameDisplay');
+            if (userInfoDiv) {
+                userInfoDiv.style.display = 'block';
+            }
+            if (usernameDisplay && data.user && data.user.username) {
+                usernameDisplay.textContent = data.user.username;
+            }
         } else {
             // エラー表示
             let errorMsg = 'ログインに失敗しました';
             if (data.message) {
                 errorMsg = data.message;
+            } else if (data.error) {
+                errorMsg = data.error;
+            } else if (data.detail) {
+                errorMsg = data.detail;
             }
+            console.error('Login failed:', errorMsg, data);
             showError('loginError', errorMsg);
         }
     } catch (error) {
+        console.error('Login error:', error);
         showError('loginError', 'エラーが発生しました: ' + error.message);
     }
 }
@@ -277,8 +364,24 @@ function logout() {
     localStorage.removeItem('username');
     localStorage.removeItem('currentMode');
     
-    document.getElementById('loginForm').style.display = 'block';
-    document.getElementById('userInfo').style.display = 'none';
+    // ログインフォームとタブを表示
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    const authTabs = document.getElementById('authTabs');
+    const userInfo = document.getElementById('userInfo');
+    
+    if (loginForm) {
+        loginForm.style.display = 'block';
+    }
+    if (registerForm) {
+        registerForm.style.display = 'none';
+    }
+    if (authTabs) {
+        authTabs.style.display = 'flex';
+    }
+    if (userInfo) {
+        userInfo.style.display = 'none';
+    }
     
     // モード選択画面に戻る
     showStep(0);
@@ -2343,17 +2446,67 @@ function escapeHtml(text) {
 
 // モーダル関連の関数
 function showLoginModal() {
-    document.getElementById('authModal').style.display = 'flex';
+    // authModal要素が存在しない場合は、ログインフォームを表示する
+    const authModal = document.getElementById('authModal');
+    if (authModal) {
+        authModal.style.display = 'flex';
+    } else {
+        // authModalが存在しない場合は、ログインフォームとタブを表示
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        const authTabs = document.getElementById('authTabs');
+        if (loginForm) {
+            loginForm.style.display = 'block';
+        }
+        if (registerForm) {
+            registerForm.style.display = 'none';
+        }
+        if (authTabs) {
+            authTabs.style.display = 'flex';
+        }
+    }
     showLoginTab();
 }
 
 function showRegisterModal() {
-    document.getElementById('authModal').style.display = 'flex';
+    // authModal要素が存在しない場合は、登録フォームを表示する
+    const authModal = document.getElementById('authModal');
+    if (authModal) {
+        authModal.style.display = 'flex';
+    } else {
+        // authModalが存在しない場合は、登録フォームとタブを表示
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        const authTabs = document.getElementById('authTabs');
+        if (loginForm) {
+            loginForm.style.display = 'none';
+        }
+        if (registerForm) {
+            registerForm.style.display = 'block';
+        }
+        if (authTabs) {
+            authTabs.style.display = 'flex';
+        }
+    }
     showRegisterTab();
 }
 
 function closeAuthModal() {
-    document.getElementById('authModal').style.display = 'none';
+    // authModal要素が存在しない場合は、ログインフォームと登録フォームを非表示にする
+    const authModal = document.getElementById('authModal');
+    if (authModal) {
+        authModal.style.display = 'none';
+    } else {
+        // authModalが存在しない場合は、ログインフォームと登録フォームを非表示
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        if (loginForm) {
+            loginForm.style.display = 'none';
+        }
+        if (registerForm) {
+            registerForm.style.display = 'none';
+        }
+    }
 }
 
 // 既存のcheckAuth関数を更新（ヘッダーのユーザー情報表示）

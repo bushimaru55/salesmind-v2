@@ -3,26 +3,18 @@
 """
 import os
 import logging
-from openai import OpenAI
-from spin.services.api_key_manager import APIKeyManager
+from typing import Tuple
+from spin.services.ai_provider_factory import AIProviderFactory
+from spin.models import AIModel
 
 logger = logging.getLogger(__name__)
 
-def get_openai_client_for_scoring():
-    """スコアリング用のOpenAIクライアントを取得"""
-    api_key, model_name = APIKeyManager.get_api_key_and_model('scoring')
-    
-    if not api_key:
-        api_key = os.getenv("OPENAI_API_KEY")
-        model_name = "gpt-4o-mini"
-        if api_key:
-            logger.warning("環境変数からAPIキーを取得しました（scoring）。データベースにAPIキーを登録することを推奨します。")
-    
-    if not api_key:
-        raise ValueError("OpenAI APIキーが見つかりません（scoring）。管理画面からAPIキーを登録してください。")
-    
-    client = OpenAI(api_key=api_key)
-    return client, model_name
+def get_client_and_model_for_scoring() -> Tuple:
+    """スコアリング用のクライアントとモデルを取得（新しいシステム）"""
+    client, model = AIProviderFactory.get_client_and_model_for_purpose('scoring')
+    if not client or not model:
+        raise ValueError("スコアリング用のAPIキーとモデルが見つかりません。管理画面から設定してください。")
+    return client, model
 
 
 def score_conversation(session, conversation_history):
@@ -30,12 +22,56 @@ def score_conversation(session, conversation_history):
     logger.info(f"スコアリング開始: Session {session.id}, mode={session.mode}, メッセージ数: {len(conversation_history)}")
     
     # スコアリング用のAPIキーとモデルを取得
-    client, model_name = get_openai_client_for_scoring()
+    client, model = get_client_and_model_for_scoring()
+    model_name = model.model_id
+    logger.info(f"スコアリング使用モデル: {model.provider} / {model_name}")
     # 会話履歴をテキスト形式に変換
     conversation_text = ""
+    irrelevant_topics = []  # 営業とは関係ない話題を記録
+    
+    # 営業とは関係ない話題のキーワード
+    irrelevant_keywords = [
+        'トイレ', 'お手洗い', '便所', '化粧室',
+        '天気', '雨', '晴れ', '気温',
+        'ランチ', '昼食', '食事', 'ご飯',
+        '趣味', 'スポーツ', '映画', '音楽',
+        'プライベート', '家族', '友人',
+        '今日の', '昨日の', '明日の',
+    ]
+    
     for msg in conversation_history:
         role_name = "営業担当者" if msg.role == 'salesperson' else "顧客"
+        message_text = msg.message.lower()
+        
+        # 営業担当者の発言で、営業とは関係ない話題を検出
+        if msg.role == 'salesperson':
+            for keyword in irrelevant_keywords:
+                if keyword in message_text:
+                    # 業界・価値提案・顧客の課題と関連性があるかチェック
+                    is_irrelevant = True
+                    if session.industry and session.industry.lower() in message_text:
+                        is_irrelevant = False
+                    if session.value_proposition and session.value_proposition.lower() in message_text:
+                        is_irrelevant = False
+                    if session.customer_pain and session.customer_pain.lower() in message_text:
+                        is_irrelevant = False
+                    
+                    if is_irrelevant:
+                        irrelevant_topics.append(f"「{msg.message}」")
+                        break
+        
         conversation_text += f"{role_name}: {msg.message}\n"
+    
+    # 営業とは関係ない話題の警告文を準備
+    irrelevant_warning = ""
+    if irrelevant_topics:
+        irrelevant_warning = f"""
+【重要：営業とは関係ない話題の検出】
+以下の営業担当者の発言は、営業商談とは明らかに関係ない話題です：
+{chr(10).join(irrelevant_topics)}
+
+これらの発言は営業スキルとして評価すべきではありません。大幅な減点を適用してください。
+"""
     
     # 企業情報を取得（詳細診断モードの場合）
     company_info_text = ""
@@ -86,6 +122,8 @@ def score_conversation(session, conversation_history):
 会話履歴:
 {conversation_text}
 
+{irrelevant_warning}
+
 【重要】評価の対象は「営業担当者の発言・行動・質問の質」です。
 顧客の事情（予算不足、タイミング、社内承認など）による失注は、営業の評価に影響させないでください。
 
@@ -130,6 +168,18 @@ def score_conversation(session, conversation_history):
 6. 【最重要】営業の責任と顧客事情を完全に分離して採点する。顧客が「予算がない」「タイミングが悪い」「社内承認が必要」などの理由で断っても、営業側の行動が正しければ高スコアを出す。
 7. 論理矛盾なし・問いと答えが噛み合っている・課題が自然に深掘りされている、この3つが揃えば最低 60点以上とする。
 8. 顧客の事情による失注（予算不足、タイミング、社内承認など）は、営業の評価に影響させない。
+9. 【最重要】営業とは明らかに関係ない話をした場合は、大幅な減点を適用してください。
+   - 営業とは関係ない話の例：
+     * 「トイレを貸してください」「お手洗いはどこですか」などの物理的な要求
+     * 「天気の話」「趣味の話」「プライベートな話」など、営業商談と無関係な話題
+     * 「今日のランチは何を食べましたか？」などの雑談
+     * 業界・価値提案・顧客の課題と全く関係ない話題
+   - 減点基準：
+     * 営業とは明らかに関係ない話が1回でも含まれている場合：総合スコアから20〜30点を減点
+     * 営業とは関係ない話が複数回含まれている場合：総合スコアから30〜50点を減点
+     * 営業とは関係ない話が会話の大部分を占めている場合：総合スコアを0〜20点に制限
+   - 営業とは関係ない話をした場合でも、他の要素（探索力、影響の引き出しなど）は通常通り評価してください。
+     ただし、総合スコアには上記の減点を適用してください。
 
 評価結果をJSON形式で返してください。必ずJSON形式で返してください。
 {{
@@ -182,17 +232,41 @@ def score_conversation(session, conversation_history):
 """
     
     try:
-        res = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": "あなたは営業スキル評価の専門家です。必ずJSON形式で回答してください。"},
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.7,
+        messages = [
+            {"role": "system", "content": "あなたは営業スキル評価の専門家です。必ずJSON形式で回答してください。"},
+            {"role": "user", "content": prompt},
+        ]
+        
+        # response_formatは一部のモデルのみサポート（gpt-4-turbo, gpt-4o, gpt-3.5-turbo-1106以降など）
+        # gpt-4（旧モデル）ではサポートされていないため、条件付きで使用
+        kwargs = {}
+        # モデルIDで判定（response_formatをサポートするモデルのみ）
+        supports_json_mode = any(
+            model_id in model.model_id.lower() 
+            for model_id in ['gpt-4-turbo', 'gpt-4o', 'gpt-3.5-turbo-1106', 'gpt-3.5-turbo-0125', 'gpt-4-0125', 'gpt-4-1106']
         )
-        response_content = res.choices[0].message.content
-        logger.info(f"スコアリング完了: Session {session.id}, mode={session.mode}, model={model_name}")
+        
+        if supports_json_mode:
+            kwargs['response_format'] = {"type": "json_object"}
+        else:
+            # response_formatが使えない場合は、プロンプトでJSON形式を強く要求
+            messages[0]["content"] = "あなたは営業スキル評価の専門家です。必ずJSON形式で回答してください。他の形式は一切使用しないでください。"
+        
+        response_content, usage = client.chat_completion(
+            model=model,
+            messages=messages,
+            temperature=0.7,
+            **kwargs
+        )
+        
+        if not response_content:
+            raise ValueError("AIからの応答が空です")
+        
+        logger.info(
+            f"スコアリング完了: Session {session.id}, mode={session.mode}, "
+            f"provider={model.provider}, model={model_name}, "
+            f"tokens={usage.get('total_tokens', 0) if usage else 'N/A'}"
+        )
         return response_content
     except Exception as e:
         logger.error(f"スコアリングエラー: Session {session.id}, Error: {str(e)}", exc_info=True)

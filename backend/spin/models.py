@@ -1,6 +1,292 @@
 from django.db import models
 from django.contrib.auth.models import User
 import uuid
+from decimal import Decimal
+
+
+class AIProviderKey(models.Model):
+    """AIプロバイダーのAPIキー管理（マルチプロバイダー対応）"""
+    
+    PROVIDER_CHOICES = [
+        ('openai', 'OpenAI'),
+        ('anthropic', 'Anthropic (Claude)'),
+        ('google', 'Google (Gemini)'),
+        ('other', 'その他'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200, help_text="キーの識別名（例: Main OpenAI API, Claude Backup）")
+    provider = models.CharField(
+        max_length=50,
+        choices=PROVIDER_CHOICES,
+        default='openai',
+        help_text="AIプロバイダー"
+    )
+    api_key = models.CharField(max_length=500, help_text="APIキー")
+    api_endpoint = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="カスタムAPIエンドポイント（オプション）"
+    )
+    description = models.TextField(blank=True, null=True, help_text="キーの説明")
+    
+    # ステータス
+    is_active = models.BooleanField(default=True, help_text="有効/無効")
+    is_default = models.BooleanField(default=False, help_text="このプロバイダーのデフォルトキー")
+    
+    # レート制限・予算管理
+    rate_limit_rpm = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="レート制限（Requests Per Minute）"
+    )
+    rate_limit_tpm = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="レート制限（Tokens Per Minute）"
+    )
+    monthly_budget = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="月間予算上限（USD）"
+    )
+    current_usage = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="当月の使用量（USD）"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['provider', '-is_default', '-is_active', '-created_at']
+        verbose_name = 'API統合管理'
+        verbose_name_plural = 'API統合管理'
+    
+    def __str__(self):
+        status = "✓" if self.is_active else "✗"
+        default = " [デフォルト]" if self.is_default else ""
+        return f"{status} {self.name} ({self.get_provider_display()}){default}"
+    
+    def save(self, *args, **kwargs):
+        # プロバイダーごとに1つだけデフォルトを許可
+        if self.is_default:
+            AIProviderKey.objects.filter(
+                provider=self.provider,
+                is_default=True
+            ).exclude(id=self.id).update(is_default=False)
+        super().save(*args, **kwargs)
+
+
+class AIModel(models.Model):
+    """AIモデルのマスターデータ"""
+    
+    PROVIDER_CHOICES = AIProviderKey.PROVIDER_CHOICES
+    
+    provider = models.CharField(
+        max_length=50,
+        choices=PROVIDER_CHOICES,
+        help_text="AIプロバイダー"
+    )
+    model_id = models.CharField(
+        max_length=100,
+        help_text="モデルID（例: gpt-4o, claude-3-5-sonnet-20241022）"
+    )
+    display_name = models.CharField(
+        max_length=200,
+        help_text="表示名（例: GPT-4o（高性能））"
+    )
+    description = models.TextField(blank=True, null=True, help_text="モデルの説明")
+    
+    # 性能指標
+    context_window = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="コンテキストウィンドウ（トークン数）"
+    )
+    max_output_tokens = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="最大出力トークン数"
+    )
+    supports_streaming = models.BooleanField(default=True, help_text="ストリーミング対応")
+    supports_function_calling = models.BooleanField(default=False, help_text="関数呼び出し対応")
+    supports_vision = models.BooleanField(default=False, help_text="画像認識対応")
+    
+    # コスト情報（USD per 1M tokens）
+    input_cost_per_1m = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="入力コスト（USD/1Mトークン）"
+    )
+    output_cost_per_1m = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="出力コスト（USD/1Mトークン）"
+    )
+    
+    # 推奨用途
+    recommended_for_generation = models.BooleanField(default=False, help_text="SPIN質問生成に推奨")
+    recommended_for_chat = models.BooleanField(default=False, help_text="チャットに推奨")
+    recommended_for_scoring = models.BooleanField(default=False, help_text="スコアリングに推奨")
+    recommended_for_analysis = models.BooleanField(default=False, help_text="分析に推奨")
+    
+    is_active = models.BooleanField(default=True, help_text="有効/無効")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['provider', 'model_id']
+        verbose_name = 'AIモデル'
+        verbose_name_plural = 'AIモデル'
+        unique_together = [['provider', 'model_id']]
+    
+    def __str__(self):
+        return f"{self.get_provider_display()} - {self.display_name}"
+    
+    def get_estimated_cost(self, input_tokens: int, output_tokens: int) -> Decimal:
+        """推定コストを計算"""
+        if not self.input_cost_per_1m or not self.output_cost_per_1m:
+            return Decimal('0.00')
+        
+        input_cost = (Decimal(input_tokens) / Decimal('1000000')) * self.input_cost_per_1m
+        output_cost = (Decimal(output_tokens) / Decimal('1000000')) * self.output_cost_per_1m
+        return input_cost + output_cost
+
+
+class ModelConfiguration(models.Model):
+    """用途別モデル設定（マルチプロバイダー対応）"""
+    
+    PURPOSE_CHOICES = [
+        ('spin_generation', 'SPIN質問生成'),
+        ('chat', 'チャット（顧客役）'),
+        ('scoring', 'スコアリング'),
+        ('scraping_analysis', 'スクレイピング分析'),
+    ]
+    
+    purpose = models.CharField(
+        max_length=50,
+        choices=PURPOSE_CHOICES,
+        unique=True,
+        help_text="用途"
+    )
+    
+    # プライマリ設定
+    primary_provider_key = models.ForeignKey(
+        AIProviderKey,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='primary_configs',
+        help_text="メインで使用するAPIキー"
+    )
+    primary_model = models.ForeignKey(
+        AIModel,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='primary_configs',
+        help_text="メインで使用するモデル"
+    )
+    
+    # フォールバック設定（オプション）
+    fallback_provider_key = models.ForeignKey(
+        AIProviderKey,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fallback_configs',
+        help_text="プライマリが失敗した場合の代替APIキー"
+    )
+    fallback_model = models.ForeignKey(
+        AIModel,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fallback_configs',
+        help_text="プライマリが失敗した場合の代替モデル"
+    )
+    
+    # レガシー対応（既存のOpenAIAPIKeyとの互換性）
+    legacy_model_name = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="レガシーモデル名（旧システムとの互換性用）"
+    )
+    
+    # 設定
+    is_active = models.BooleanField(
+        default=True,
+        help_text="この設定を有効にする"
+    )
+    max_retries = models.IntegerField(
+        default=3,
+        help_text="最大リトライ回数"
+    )
+    timeout_seconds = models.IntegerField(
+        default=30,
+        help_text="タイムアウト（秒）"
+    )
+    temperature = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        default=Decimal('0.70'),
+        help_text="Temperature（0.0-1.0）"
+    )
+    
+    notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text="メモ・備考"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['purpose']
+        verbose_name = '用途別モデル設定'
+        verbose_name_plural = '用途別モデル設定'
+    
+    def __str__(self):
+        if self.primary_model:
+            return f"{self.get_purpose_display()}: {self.primary_model.display_name}"
+        elif self.legacy_model_name:
+            return f"{self.get_purpose_display()}: {self.legacy_model_name} (レガシー)"
+        return f"{self.get_purpose_display()}: 未設定"
+    
+    def get_provider_and_model(self):
+        """プライマリのプロバイダーとモデルを取得"""
+        if self.primary_provider_key and self.primary_model:
+            return self.primary_provider_key, self.primary_model
+        return None, None
+    
+    def get_fallback_provider_and_model(self):
+        """フォールバックのプロバイダーとモデルを取得"""
+        if self.fallback_provider_key and self.fallback_model:
+            return self.fallback_provider_key, self.fallback_model
+        return None, None
+    
+    def has_fallback(self):
+        """フォールバック設定があるか"""
+        return bool(self.fallback_provider_key and self.fallback_model)
+    
+    @classmethod
+    def get_config_for_purpose(cls, purpose):
+        """用途に応じた設定を取得"""
+        try:
+            return cls.objects.get(purpose=purpose, is_active=True)
+        except cls.DoesNotExist:
+            return None
 
 
 class OpenAIAPIKey(models.Model):
@@ -14,11 +300,13 @@ class OpenAIAPIKey(models.Model):
     ]
     
     MODEL_CHOICES = [
-        ('gpt-4o', 'GPT-4o（最新・高性能）'),
+        ('gpt-5.2', 'GPT-5.2（最新・最高性能・推論能力強化）'),
+        ('gpt-5.1', 'GPT-5.1（高性能・推論能力）'),
+        ('gpt-4o', 'GPT-4o（高性能）'),
         ('gpt-4o-mini', 'GPT-4o-mini（高速・低コスト）'),
         ('gpt-4-turbo', 'GPT-4 Turbo'),
         ('gpt-4', 'GPT-4'),
-        ('gpt-3.5-turbo', 'GPT-3.5 Turbo'),
+        ('gpt-3.5-turbo', 'GPT-3.5 Turbo（レガシー）'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -44,8 +332,8 @@ class OpenAIAPIKey(models.Model):
     
     class Meta:
         ordering = ['-is_default', '-is_active', '-created_at']
-        verbose_name = 'OpenAI APIキー'
-        verbose_name_plural = 'OpenAI APIキー'
+        verbose_name = 'APIキー管理'
+        verbose_name_plural = 'APIキー管理'
     
     def __str__(self):
         status = "✓" if self.is_active else "✗"

@@ -1,0 +1,147 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .model-config-header {
+        background: linear-gradient(135deg, #417690 0%, #2c5364 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .model-config-header h2 {
+        margin: 0 0 10px 0;
+        font-size: 24px;
+    }
+    
+    .model-config-header p {
+        margin: 0;
+        opacity: 0.9;
+        font-size: 14px;
+    }
+    
+    .quick-actions {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        border: 1px solid #ddd;
+    }
+    
+    .quick-actions h3 {
+        margin: 0 0 15px 0;
+        font-size: 16px;
+        color: #333;
+    }
+    
+    .action-button {
+        display: inline-block;
+        padding: 10px 20px;
+        background: #417690;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        margin-right: 10px;
+        border: none;
+        cursor: pointer;
+        font-size: 14px;
+    }
+    
+    .action-button:hover {
+        background: #2c5364;
+        color: white;
+    }
+    
+    .action-button.secondary {
+        background: #6c757d;
+    }
+    
+    .action-button.secondary:hover {
+        background: #5a6268;
+    }
+    
+    .info-box {
+        background: #e7f3ff;
+        border-left: 4px solid #417690;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+    }
+    
+    .info-box h4 {
+        margin: 0 0 10px 0;
+        color: #417690;
+        font-size: 14px;
+    }
+    
+    .info-box ul {
+        margin: 0;
+        padding-left: 20px;
+    }
+    
+    .info-box li {
+        margin-bottom: 5px;
+        font-size: 13px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="model-config-header">
+    <h2>🎯 用途別モデル設定</h2>
+    <p>各機能で使用するOpenAIモデルを一括管理できます。推奨設定を適用することで、最適なコストと品質のバランスを実現できます。</p>
+</div>
+
+{% if show_init_button %}
+<div class="info-box" style="background: #fff3cd; border-left-color: #ffc107;">
+    <h4>⚠️ 初期設定が必要です</h4>
+    <p>モデル設定がまだ初期化されていません。以下のボタンをクリックして推奨設定を適用してください。</p>
+    <form method="post" action="{% url 'admin:spin_modelconfiguration_initialize' %}" style="margin-top: 10px;">
+        {% csrf_token %}
+        <button type="submit" class="action-button">推奨設定で初期化</button>
+    </form>
+</div>
+{% endif %}
+
+<div class="quick-actions">
+    <h3>クイックアクション</h3>
+    <form method="post" action="{% url 'admin:spin_modelconfiguration_apply_recommended' %}" style="display: inline;">
+        {% csrf_token %}
+        <button type="submit" class="action-button">✓ 全て推奨設定を適用</button>
+    </form>
+    <a href="{% url 'admin:spin_aiproviderkey_changelist' %}" class="action-button secondary">🔑 API統合管理</a>
+</div>
+
+<div class="info-box" style="background: #fff3cd; border-left-color: #ffc107;">
+    <h4>🔑 APIキーとモデルの関係</h4>
+    <p style="font-size: 13px; margin-bottom: 10px;">
+        モデル設定で選択できるモデルは、<strong>APIキー管理</strong>で登録されている有効なAPIキーのモデルのみです。
+    </p>
+    <ul style="font-size: 13px;">
+        <li>新しいモデルを使用したい場合は、まず<strong>APIキー管理</strong>でそのモデルのAPIキーを登録してください</li>
+        <li>各モデルに対応するAPIキーの数が表示されます</li>
+        <li>用途に合致するAPIキーがある場合は緑色（✓）で表示されます</li>
+        <li>汎用のAPIキーのみの場合は黄色（⚠️）で表示されます</li>
+        <li>APIキーがない場合は赤色（⚠️）で警告されます</li>
+    </ul>
+</div>
+
+<div class="info-box">
+    <h4>💡 推奨モデル構成</h4>
+    <ul>
+        <li><strong>SPIN質問生成:</strong> GPT-5.2（高品質な質問生成）</li>
+        <li><strong>チャット（顧客役）:</strong> GPT-4o-mini（高速応答・大量会話）</li>
+        <li><strong>スコアリング:</strong> GPT-5.2（正確な評価）</li>
+        <li><strong>スクレイピング分析:</strong> GPT-4o-mini（大量テキスト処理）</li>
+    </ul>
+    <p style="margin-top: 10px; font-size: 12px; color: #666;">
+        💰 推奨構成の想定コスト: 約$0.05/セッション
+    </p>
+</div>
+
+{{ block.super }}
+{% endblock %}
+

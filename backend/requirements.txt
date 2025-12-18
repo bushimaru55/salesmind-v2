@@ -1,6 +1,7 @@
 Django>=5.0
 djangorestframework
 openai
+anthropic>=0.18.0
 python-dotenv
 psycopg2-binary
 django-cors-headers

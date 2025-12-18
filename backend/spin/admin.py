@@ -6,12 +6,16 @@ from django.urls import path
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.http import JsonResponse
-from .models import Session, ChatMessage, Report, OpenAIAPIKey
+from .models import Session, ChatMessage, Report, OpenAIAPIKey, ModelConfiguration, AIProviderKey, AIModel
 import openai
 import logging
 
 logger = logging.getLogger(__name__)
 
+# 管理画面のカスタマイズ
+admin.site.site_header = 'SalesMind 管理画面'
+admin.site.site_title = 'SalesMind Admin'
+admin.site.index_title = 'ダッシュボード'
 
 # Django標準のUserモデルを一旦登録解除
 admin.site.unregister(User)
@@ -274,9 +278,10 @@ class ReportAdmin(admin.ModelAdmin):
     scoring_details_display.short_description = 'スコアリング詳細'
 
 
-@admin.register(OpenAIAPIKey)
+# 旧OpenAIAPIKeyは非表示（互換性のため残存）
+# @admin.register(OpenAIAPIKey)
 class OpenAIAPIKeyAdmin(admin.ModelAdmin):
-    """OpenAI APIキー管理画面"""
+    """OpenAI APIキー管理画面（レガシー・非表示）"""
     
     # 一覧表示
     list_display = ['name', 'purpose', 'model_name', 'masked_key_display', 'is_default', 'is_active', 'status_icon', 'created_at', 'updated_at', 'test_connection_link', 'edit_link']
@@ -668,4 +673,716 @@ class OpenAIAPIKeyAdmin(admin.ModelAdmin):
     class Media:
         """管理画面用のJavaScript追加"""
         js = ('admin/js/api_key_test.js',)
+
+
+@admin.register(ModelConfiguration)
+class ModelConfigurationAdmin(admin.ModelAdmin):
+    """用途別モデル設定管理画面"""
+    
+    # 一覧表示
+    list_display = ['purpose_display', 'primary_model_display', 'fallback_model_display', 'is_active', 'updated_at']
+    list_filter = ['is_active', 'purpose']
+    list_editable = ['is_active']
+    ordering = ['purpose']
+    actions = ['activate_configs']
+    
+    # 詳細ページのフィールドセット
+    fieldsets = (
+        ('基本情報', {
+            'fields': ('purpose', 'is_active')
+        }),
+        ('プライマリ設定', {
+            'fields': ('primary_provider_key', 'primary_model')
+        }),
+        ('フォールバック設定（オプション）', {
+            'fields': ('fallback_provider_key', 'fallback_model'),
+            'classes': ('collapse',)
+        }),
+        ('詳細設定', {
+            'fields': ('max_retries', 'timeout_seconds', 'temperature'),
+            'classes': ('collapse',)
+        }),
+        ('メモ', {
+            'fields': ('notes',),
+            'classes': ('collapse',)
+        }),
+        ('日時情報', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    readonly_fields = ['created_at', 'updated_at']
+    
+    class Media:
+        js = ('admin/js/model_configuration.js',)
+    
+    def purpose_display(self, obj):
+        """用途の表示"""
+        return obj.get_purpose_display()
+    purpose_display.short_description = '用途'
+    purpose_display.admin_order_field = 'purpose'
+    
+    def primary_model_display(self, obj):
+        """プライマリモデルの表示"""
+        provider_key, model = obj.get_provider_and_model()
+        if provider_key and model:
+            return format_html(
+                '<strong>{}</strong><br><span style="color: #666; font-size: 12px;">{}</span>',
+                model.display_name,
+                provider_key.name
+            )
+        return format_html('<span style="color: #dc3545;">未設定</span>')
+    primary_model_display.short_description = 'プライマリモデル'
+    
+    def fallback_model_display(self, obj):
+        """フォールバックモデルの表示"""
+        fallback_key, fallback_model = obj.get_fallback_provider_and_model()
+        if fallback_key and fallback_model:
+            return format_html(
+                '{}<br><span style="color: #666; font-size: 12px;">{}</span>',
+                fallback_model.display_name,
+                fallback_key.name
+            )
+        return format_html('<span style="color: #999;">-</span>')
+    fallback_model_display.short_description = 'フォールバック'
+    
+    def status_display(self, obj):
+        """ステータス表示"""
+        if obj.is_active:
+            color = 'green'
+            icon = '✓'
+            text = '有効'
+        else:
+            color = 'red'
+            icon = '✗'
+            text = '無効'
+        
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}</span> {}',
+            color, icon, text
+        )
+    status_display.short_description = 'ステータス'
+    
+    def get_form(self, request, obj=None, **kwargs):
+        """フォームをカスタマイズ"""
+        form = super().get_form(request, obj, **kwargs)
+        
+        # 用途フィールドのヘルプテキストをカスタマイズ
+        if 'purpose' in form.base_fields:
+            form.base_fields['purpose'].help_text = 'この設定を適用する用途を選択してください'
+        
+        # Primary modelの選択肢をフィルタリング
+        if 'primary_model' in form.base_fields:
+            # 現在選択されているprimary_provider_keyを取得
+            provider_key = None
+            if obj and obj.primary_provider_key:
+                provider_key = obj.primary_provider_key
+            elif request.POST and 'primary_provider_key' in request.POST:
+                try:
+                    provider_key_id = request.POST.get('primary_provider_key')
+                    if provider_key_id:
+                        provider_key = AIProviderKey.objects.get(id=provider_key_id)
+                except (AIProviderKey.DoesNotExist, ValueError):
+                    pass
+            
+            if provider_key:
+                # 選択されたプロバイダーのモデルのみを表示
+                available_models = AIModel.objects.filter(
+                    provider=provider_key.provider,
+                    is_active=True
+                ).order_by('model_id')
+                
+                # 選択肢を更新
+                form.base_fields['primary_model'].queryset = available_models
+                form.base_fields['primary_model'].help_text = (
+                    f'💡 {provider_key.get_provider_display()}のモデルのみ表示されています。'
+                    f'（APIキー: {provider_key.name}）'
+                )
+            else:
+                # プロバイダーキーが選択されていない場合は、空のクエリセットを設定
+                # JavaScriptが動的に選択肢を更新するため、初期状態では空にする
+                form.base_fields['primary_model'].queryset = AIModel.objects.none()
+                form.base_fields['primary_model'].help_text = (
+                    '💡 先に「Primary provider key」を選択すると、そのプロバイダーのモデルのみが表示されます。'
+                )
+        
+        # Fallback modelも同様にフィルタリング
+        if 'fallback_model' in form.base_fields:
+            fallback_provider_key = None
+            if obj and obj.fallback_provider_key:
+                fallback_provider_key = obj.fallback_provider_key
+            elif request.POST and 'fallback_provider_key' in request.POST:
+                try:
+                    fallback_provider_key_id = request.POST.get('fallback_provider_key')
+                    if fallback_provider_key_id:
+                        fallback_provider_key = AIProviderKey.objects.get(id=fallback_provider_key_id)
+                except (AIProviderKey.DoesNotExist, ValueError):
+                    pass
+            
+            if fallback_provider_key:
+                available_models = AIModel.objects.filter(
+                    provider=fallback_provider_key.provider,
+                    is_active=True
+                ).order_by('model_id')
+                
+                form.base_fields['fallback_model'].queryset = available_models
+                form.base_fields['fallback_model'].help_text = (
+                    f'💡 {fallback_provider_key.get_provider_display()}のモデルのみ表示されています。'
+                    f'（APIキー: {fallback_provider_key.name}）'
+                )
+            else:
+                # プロバイダーキーが選択されていない場合は、空のクエリセットを設定
+                # JavaScriptが動的に選択肢を更新するため、初期状態では空にする
+                form.base_fields['fallback_model'].queryset = AIModel.objects.none()
+                form.base_fields['fallback_model'].help_text = (
+                    '💡 先に「Fallback provider key」を選択すると、そのプロバイダーのモデルのみが表示されます。'
+                )
+        
+        return form
+    
+    def save_model(self, request, obj, form, change):
+        """保存時の処理"""
+        super().save_model(request, obj, form, change)
+        
+        provider_key, model = obj.get_provider_and_model()
+        if provider_key and model:
+            self.message_user(
+                request,
+                f'✓ {obj.get_purpose_display()}に{model.display_name}を設定しました。',
+                level=messages.SUCCESS
+            )
+        else:
+            self.message_user(
+                request,
+                f'{obj.get_purpose_display()}の設定を保存しました。',
+                level=messages.INFO
+            )
+    
+    @admin.action(description='選択した設定を有効化')
+    def activate_configs(self, request, queryset):
+        """選択した設定を有効化"""
+        count = queryset.update(is_active=True)
+        self.message_user(
+            request,
+            f'✓ {count}件の設定を有効化しました。',
+            level=messages.SUCCESS
+        )
+    
+    def changelist_view(self, request, extra_context=None):
+        """一覧画面のカスタマイズ"""
+        from django.utils.safestring import mark_safe
+        
+        extra_context = extra_context or {}
+        
+        # タイトルとサブタイトル
+        extra_context['title'] = '用途別モデル設定'
+        extra_context['subtitle'] = mark_safe(
+            '<div style="background: #e7f3ff; padding: 15px; border-left: 4px solid #2196F3; margin-bottom: 20px;">'
+            '<strong>💡 設定の流れ:</strong><br>'
+            '<ol style="margin: 10px 0 0 20px; padding: 0;">'
+            '<li><strong>1️⃣ <a href="/admin/spin/aiproviderkey/" style="color: #2196F3;">API統合管理</a></strong> - プロバイダーのAPIキーを登録（1つのキーで全モデル使用可能）</li>'
+            '<li><strong>2️⃣ <a href="/admin/spin/aimodel/" style="color: #2196F3;">AIモデル</a></strong> - 利用可能なモデルの詳細情報を確認（コスト・性能・推奨用途）</li>'
+            '<li><strong>3️⃣ このページ</strong> - 各用途に「APIキー + モデル」を設定して実際に使用</li>'
+            '</ol>'
+            '</div>'
+        )
+        
+        # 全ての用途の設定が存在するか確認
+        all_purposes = [choice[0] for choice in ModelConfiguration.PURPOSE_CHOICES]
+        existing_purposes = set(ModelConfiguration.objects.values_list('purpose', flat=True))
+        missing_purposes = set(all_purposes) - existing_purposes
+        
+        if missing_purposes:
+            extra_context['missing_purposes'] = missing_purposes
+            extra_context['show_init_button'] = True
+        
+        # 推奨モデル情報を取得
+        from spin.models import AIModel
+        recommended_models = {}
+        for purpose_code, purpose_name in ModelConfiguration.PURPOSE_CHOICES:
+            if purpose_code == 'spin_generation':
+                models = AIModel.objects.filter(recommended_for_generation=True, is_active=True).first()
+            elif purpose_code == 'chat':
+                models = AIModel.objects.filter(recommended_for_chat=True, is_active=True).first()
+            elif purpose_code == 'scoring':
+                models = AIModel.objects.filter(recommended_for_scoring=True, is_active=True).first()
+            elif purpose_code == 'scraping_analysis':
+                models = AIModel.objects.filter(recommended_for_analysis=True, is_active=True).first()
+            else:
+                models = None
+            
+            if models:
+                recommended_models[purpose_code] = models.display_name
+        
+        extra_context['recommended_models'] = recommended_models
+        
+        return super().changelist_view(request, extra_context)
+    
+    def get_urls(self):
+        """カスタムURLを追加"""
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'apply-recommended/',
+                self.admin_site.admin_view(self.apply_recommended_view),
+                name='spin_modelconfiguration_apply_recommended',
+            ),
+            path(
+                'initialize/',
+                self.admin_site.admin_view(self.initialize_view),
+                name='spin_modelconfiguration_initialize',
+            ),
+            path(
+                'get-models-for-provider/',
+                self.admin_site.admin_view(self.get_models_for_provider_view),
+                name='spin_modelconfiguration_get_models_for_provider',
+            ),
+        ]
+        return custom_urls + urls
+    
+    def apply_recommended_view(self, request):
+        """推奨設定適用のビュー"""
+        if request.method == 'POST':
+            # 推奨設定を適用（新しい構造では手動設定が必要）
+            messages.info(request, 'ℹ️ 新しいマルチプロバイダー構造では、各用途のプライマリモデルを手動で設定してください。')
+        return redirect('admin:spin_modelconfiguration_changelist')
+    
+    def initialize_view(self, request):
+        """初期化のビュー"""
+        if request.method == 'POST':
+            # 初期化（新しい構造では手動設定が必要）
+            messages.info(request, 'ℹ️ 新しいマルチプロバイダー構造では、各用途のプライマリモデルを手動で設定してください。')
+        return redirect('admin:spin_modelconfiguration_changelist')
+    
+    def get_models_for_provider_view(self, request):
+        """プロバイダーキーに対応するモデル一覧を取得（AJAX用）"""
+        if request.method != 'POST':
+            return JsonResponse({'success': False, 'message': 'Invalid request method'})
+        
+        import json
+        try:
+            data = json.loads(request.body)
+            provider_key_id = data.get('provider_key_id')
+            
+            if not provider_key_id:
+                return JsonResponse({'success': False, 'message': 'Provider key ID is required'})
+            
+            provider_key = AIProviderKey.objects.get(id=provider_key_id, is_active=True)
+            
+            # そのプロバイダーのモデル一覧を取得
+            models = AIModel.objects.filter(
+                provider=provider_key.provider,
+                is_active=True
+            ).order_by('model_id')
+            
+            models_data = [
+                {
+                    'id': model.id,
+                    'display_name': f'{model.get_provider_display()} - {model.display_name}'
+                }
+                for model in models
+            ]
+            
+            return JsonResponse({
+                'success': True,
+                'models': models_data,
+                'provider': provider_key.get_provider_display()
+            })
+        
+        except AIProviderKey.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'Provider key not found'})
+        except Exception as e:
+            logger.error(f"Error getting models for provider: {e}")
+            return JsonResponse({'success': False, 'message': str(e)})
+
+
+@admin.register(AIProviderKey)
+class AIProviderKeyAdmin(admin.ModelAdmin):
+    """API統合管理画面（OpenAI、Claude、Geminiなど全てのAIプロバイダーを統合管理）"""
+    
+    # 一覧表示
+    list_display = ['name', 'provider_display', 'is_active', 'is_default', 'usage_display', 'created_at']
+    list_filter = ['provider', 'is_active', 'is_default', 'created_at']
+    search_fields = ['name', 'description']
+    ordering = ['provider', '-is_default', '-is_active', '-created_at']
+    
+    def changelist_view(self, request, extra_context=None):
+        """一覧画面のカスタマイズ"""
+        from django.utils.safestring import mark_safe
+        
+        extra_context = extra_context or {}
+        extra_context['title'] = 'API統合管理'
+        extra_context['subtitle'] = mark_safe(
+            '<div style="background: #e7f3ff; padding: 15px; border-left: 4px solid #2196F3; margin-bottom: 20px;">'
+            '<strong>💡 API統合管理とは？</strong><br>'
+            '<p style="margin: 10px 0;">OpenAI、Claude、Geminiなど、複数のAIプロバイダーのAPIキーを一元管理します。</p>'
+            '<p style="margin: 10px 0;"><strong>重要:</strong> 1つのAPIキーで、そのプロバイダーの<strong>全てのモデル</strong>を使用できます。</p>'
+            '<ul style="margin: 10px 0 0 20px; padding: 0;">'
+            '<li>🤖 <strong>OpenAI:</strong> GPT-4o、GPT-5.2など全モデル</li>'
+            '<li>🧠 <strong>Anthropic (Claude):</strong> Claude 3.5 Sonnet、Claude 3 Opusなど全モデル</li>'
+            '<li>🔍 <strong>Google (Gemini):</strong> Gemini 1.5 Pro、Gemini 1.5 Flashなど全モデル</li>'
+            '</ul>'
+            '</div>'
+        )
+        return super().changelist_view(request, extra_context)
+    
+    # ヘルプテキスト
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        form.base_fields['provider'].help_text = (
+            '💡 <strong>重要:</strong> 1つのAPIキーで、そのプロバイダーの全てのモデルを使用できます。<br>'
+            '例: OpenAI APIキー1つで、GPT-4o、GPT-5.2など全てのOpenAIモデルが利用可能です。'
+        )
+        return form
+    
+    # 詳細ページのフィールドセット
+    fieldsets = (
+        ('基本情報', {
+            'fields': ('name', 'provider', 'description')
+        }),
+        ('APIキー設定', {
+            'fields': ('api_key', 'api_endpoint', 'test_result_display'),
+            'description': '⚠️ APIキーは慎重に扱ってください。外部に漏らさないよう注意してください。'
+        }),
+        ('ステータス', {
+            'fields': ('is_active', 'is_default')
+        }),
+        ('レート制限・予算管理', {
+            'fields': ('rate_limit_rpm', 'rate_limit_tpm', 'monthly_budget', 'current_usage'),
+            'classes': ('collapse',)
+        }),
+        ('日時情報', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    readonly_fields = ['created_at', 'updated_at', 'test_result_display']
+    
+    def provider_display(self, obj):
+        """プロバイダーの表示"""
+        icons = {
+            'openai': '🤖',
+            'anthropic': '🧠',
+            'google': '🔍',
+            'other': '🔧'
+        }
+        icon = icons.get(obj.provider, '❓')
+        return format_html(
+            '{} <strong>{}</strong>',
+            icon,
+            obj.get_provider_display()
+        )
+    provider_display.short_description = 'プロバイダー'
+    provider_display.admin_order_field = 'provider'
+    
+    def usage_display(self, obj):
+        """使用量の表示"""
+        if obj.monthly_budget:
+            percentage = (obj.current_usage / obj.monthly_budget) * 100
+            color = '#28a745' if percentage < 70 else ('#ffc107' if percentage < 90 else '#dc3545')
+            return format_html(
+                '<span style="color: {};">${} / ${} ({}%)</span>',
+                color,
+                f'{obj.current_usage:.2f}',
+                f'{obj.monthly_budget:.2f}',
+                f'{percentage:.1f}'
+            )
+        return format_html('${}', f'{obj.current_usage:.2f}')
+    usage_display.short_description = '使用量'
+    
+    def test_result_display(self, obj):
+        """テスト結果表示エリア（新規作成時と既存レコードの両方に対応）"""
+        from django.utils.safestring import mark_safe
+        
+        if obj.id:
+            # 既存レコードの場合
+            return mark_safe(
+                f'<div id="test-result-{obj.id}" style="margin-top: 10px;">'
+                f'<button type="button" onclick="testConnection(\'{obj.id}\')" '
+                f'style="padding: 8px 16px; background: #417690; color: white; border: none; '
+                f'border-radius: 4px; cursor: pointer;">接続テスト</button>'
+                f'<div id="test-output-{obj.id}" style="margin-top: 10px;"></div>'
+                f'</div>'
+            )
+        else:
+            # 新規作成時: APIキーとプロバイダーを入力すればテスト可能
+            return mark_safe(
+                '<div id="test-result-new" style="margin-top: 10px;">'
+                '<button type="button" onclick="testConnection(null)" '
+                'style="padding: 8px 16px; background: #417690; color: white; border: none; '
+                'border-radius: 4px; cursor: pointer;">接続テスト</button>'
+                '<div style="margin-top: 5px; font-size: 12px; color: #666;">'
+                '💡 APIキーとプロバイダーを入力してからテストしてください'
+                '</div>'
+                '<div id="test-output-new" style="margin-top: 10px;"></div>'
+                '</div>'
+            )
+    test_result_display.short_description = '接続テスト'
+    
+    class Media:
+        js = ('admin/js/provider_key_test.js',)
+    
+    def get_urls(self):
+        """カスタムURLを追加"""
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'test-connection/',
+                self.admin_site.admin_view(self.test_connection_view),
+                name='spin_aiproviderkey_test_connection',
+            ),
+            path(
+                'test-connection/<uuid:key_id>/',
+                self.admin_site.admin_view(self.test_connection_view),
+                name='spin_aiproviderkey_test_connection_with_id',
+            ),
+        ]
+        return custom_urls + urls
+    
+    def test_connection_view(self, request, key_id=None):
+        """接続テストビュー（新規作成時と既存レコードの両方に対応）"""
+        if request.method == 'POST':
+            try:
+                import json
+                from spin.services.ai_provider_factory import AIProviderFactory
+                from spin.models import AIProviderKey
+                
+                # まずPOSTデータから取得を試みる（新規作成時）
+                # JSONデータとフォームデータの両方から取得を試みる
+                data = {}
+                if request.body:
+                    try:
+                        data = json.loads(request.body)
+                    except json.JSONDecodeError:
+                        pass
+                
+                # 複数の方法で値を取得（JSON > POST > GETの順で優先）
+                api_key = data.get('api_key') or request.POST.get('api_key') or request.GET.get('api_key')
+                provider = data.get('provider') or request.POST.get('provider') or request.GET.get('provider')
+                # JSONデータからkey_idも取得（URLパラメータより優先）
+                json_key_id = data.get('key_id')
+                if json_key_id:
+                    key_id = json_key_id
+                
+                # デバッグ情報
+                logger.info(f"Connection test request - key_id: {key_id}")
+                logger.info(f"JSON data keys: {list(data.keys()) if data else 'empty'}")
+                logger.info(f"POST data keys: {list(request.POST.keys()) if request.POST else 'empty'}")
+                logger.info(f"Received - api_key: {'present (' + str(len(api_key)) + ' chars)' if api_key else 'missing'}, provider: {provider or 'missing'}")
+                
+                # key_idが指定されている場合、データベースに存在するか確認
+                provider_key = None
+                if key_id:
+                    try:
+                        provider_key = AIProviderKey.objects.get(id=key_id)
+                        logger.info(f"Existing record found: key_id={key_id}, provider={provider_key.provider}")
+                    except AIProviderKey.DoesNotExist:
+                        logger.warning(f"Key ID not found in database: {key_id}, treating as new record")
+                        provider_key = None
+                
+                # 新規作成時（key_idがない、または存在しない場合）はPOSTデータから取得
+                if provider_key is None:
+                    if not api_key or not provider:
+                        error_details = []
+                        if not api_key:
+                            error_details.append('APIキーが取得できませんでした')
+                        if not provider:
+                            error_details.append('プロバイダーが取得できませんでした')
+                        
+                        logger.error(f"Missing required data: {', '.join(error_details)}")
+                        return JsonResponse({
+                            'success': False,
+                            'message': 'APIキーとプロバイダーが必要です。\n' + '\n'.join(error_details)
+                        })
+                    
+                    logger.info(f"New record test: provider={provider}, api_key={api_key[:20]}...")
+                    
+                    # 一時的なAIProviderKeyオブジェクトを作成
+                    temp_provider_key = AIProviderKey(
+                        api_key=api_key,
+                        provider=provider
+                    )
+                    
+                    # プロバイダーに応じたクライアントを作成してテスト
+                    client = AIProviderFactory.create_client(temp_provider_key)
+                    result = client.test_connection()
+                    
+                    logger.info(f"Connection test result: provider={provider}, success={result.get('success')}")
+                    
+                else:
+                    # 既存レコードの場合でも、フォームから取得した値を使用（フォームが編集されている可能性があるため）
+                    if api_key and provider:
+                        # フォームから取得した値で一時オブジェクトを作成
+                        logger.info(f"Existing record test (using form values): provider={provider}, api_key={api_key[:20]}...")
+                        temp_provider_key = AIProviderKey(
+                            api_key=api_key,
+                            provider=provider
+                        )
+                        client = AIProviderFactory.create_client(temp_provider_key)
+                    else:
+                        # フォームから取得できない場合は、データベースの値を使用
+                        logger.info(f"Existing record test (using DB values): provider={provider_key.provider}")
+                        client = AIProviderFactory.create_client(provider_key)
+                    result = client.test_connection()
+                
+                return JsonResponse(result)
+                
+            except ImportError as e:
+                logger.error(f"Connection test import error: {e}")
+                return JsonResponse({
+                    'success': False,
+                    'message': f'ライブラリがインストールされていません: {str(e)}'
+                })
+            except ValueError as e:
+                logger.error(f"Connection test value error: {e}")
+                return JsonResponse({
+                    'success': False,
+                    'message': f'プロバイダーエラー: {str(e)}'
+                })
+            except Exception as e:
+                logger.error(f"Connection test error: {e}", exc_info=True)
+                return JsonResponse({
+                    'success': False,
+                    'message': f'テストエラー: {str(e)}'
+                })
+        
+        return JsonResponse({'success': False, 'message': 'Invalid request method'})
+
+
+@admin.register(AIModel)
+class AIModelAdmin(admin.ModelAdmin):
+    """AIモデル管理画面"""
+    
+    # 一覧表示
+    list_display = ['display_name', 'provider_display', 'model_id', 'cost_display', 'api_key_status', 'recommended_display', 'is_active']
+    list_filter = ['provider', 'is_active', 'supports_streaming', 'supports_function_calling', 'supports_vision']
+    search_fields = ['model_id', 'display_name', 'description']
+    ordering = ['provider', 'model_id']
+    
+    # ヘルプテキスト
+    class Media:
+        css = {
+            'all': ('admin/css/aimodel_admin.css',)
+        }
+    
+    def changelist_view(self, request, extra_context=None):
+        from django.utils.safestring import mark_safe
+        
+        extra_context = extra_context or {}
+        extra_context['title'] = 'AIモデル一覧（マスターデータ）'
+        extra_context['subtitle'] = mark_safe(
+            '<div style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin-bottom: 20px;">'
+            '<strong>ℹ️ このページについて</strong><br>'
+            '<p style="margin: 10px 0;">各AIモデルの詳細情報（コスト、性能、推奨用途）を管理します。</p>'
+            '<p style="margin: 10px 0;"><strong>重要:</strong></p>'
+            '<ul style="margin: 10px 0 0 20px; padding: 0;">'
+            '<li><strong>IS ACTIVE（有効）:</strong> システムで選択可能かどうか（マスターデータの状態）</li>'
+            '<li><strong>APIキー:</strong> 実際に使用できるかどうか（<a href="/admin/spin/aiproviderkey/" style="color: #856404;">API統合管理</a>でキーを登録）</li>'
+            '<li><strong>運用設定:</strong> 実際の使用は<a href="/admin/spin/modelconfiguration/" style="color: #856404;">用途別モデル設定</a>で行います</li>'
+            '</ul>'
+            '</div>'
+        )
+        return super().changelist_view(request, extra_context)
+    
+    # 詳細ページのフィールドセット
+    fieldsets = (
+        ('基本情報', {
+            'fields': ('provider', 'model_id', 'display_name', 'description', 'is_active')
+        }),
+        ('性能指標', {
+            'fields': ('context_window', 'max_output_tokens', 'supports_streaming', 'supports_function_calling', 'supports_vision')
+        }),
+        ('コスト情報', {
+            'fields': ('input_cost_per_1m', 'output_cost_per_1m', 'estimated_cost_display')
+        }),
+        ('推奨用途', {
+            'fields': ('recommended_for_generation', 'recommended_for_chat', 'recommended_for_scoring', 'recommended_for_analysis')
+        }),
+        ('日時情報', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    readonly_fields = ['created_at', 'updated_at', 'estimated_cost_display']
+    
+    def provider_display(self, obj):
+        """プロバイダーの表示"""
+        icons = {
+            'openai': '🤖',
+            'anthropic': '🧠',
+            'google': '🔍',
+            'other': '🔧'
+        }
+        icon = icons.get(obj.provider, '❓')
+        return format_html('{} {}', icon, obj.get_provider_display())
+    provider_display.short_description = 'プロバイダー'
+    provider_display.admin_order_field = 'provider'
+    
+    def cost_display(self, obj):
+        """コストの表示"""
+        if obj.input_cost_per_1m and obj.output_cost_per_1m:
+            return format_html(
+                '入力: ${}/1M<br>出力: ${}/1M',
+                f'{obj.input_cost_per_1m:.4f}',
+                f'{obj.output_cost_per_1m:.4f}'
+            )
+        return '-'
+    cost_display.short_description = 'コスト'
+    
+    def api_key_status(self, obj):
+        """APIキーの登録状況"""
+        # このプロバイダーのAPIキーが登録されているか確認
+        api_keys = AIProviderKey.objects.filter(
+            provider=obj.provider,
+            is_active=True
+        )
+        
+        key_count = api_keys.count()
+        
+        if key_count == 0:
+            return format_html(
+                '<span style="color: #dc3545; font-weight: bold;">⚠️ APIキー未登録</span>'
+            )
+        elif key_count == 1:
+            key = api_keys.first()
+            return format_html(
+                '<span style="color: #28a745;">✓ 利用可能</span><br>'
+                '<span style="font-size: 11px; color: #666;">{}</span>',
+                key.name
+            )
+        else:
+            return format_html(
+                '<span style="color: #28a745;">✓ 利用可能</span><br>'
+                '<span style="font-size: 11px; color: #666;">{}個のキー</span>',
+                key_count
+            )
+    api_key_status.short_description = 'APIキー'
+    
+    def recommended_display(self, obj):
+        """推奨用途の表示"""
+        badges = []
+        if obj.recommended_for_generation:
+            badges.append('<span style="background: #417690; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">SPIN生成</span>')
+        if obj.recommended_for_chat:
+            badges.append('<span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">チャット</span>')
+        if obj.recommended_for_scoring:
+            badges.append('<span style="background: #ffc107; color: #333; padding: 2px 6px; border-radius: 3px; font-size: 11px;">スコアリング</span>')
+        if obj.recommended_for_analysis:
+            badges.append('<span style="background: #17a2b8; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">分析</span>')
+        
+        if badges:
+            return format_html(' '.join(badges))
+        return '-'
+    recommended_display.short_description = '推奨用途'
+    
+    def estimated_cost_display(self, obj):
+        """推定コストの表示（例: 1000入力/1000出力トークン）"""
+        if obj.input_cost_per_1m and obj.output_cost_per_1m:
+            cost = obj.get_estimated_cost(1000, 1000)
+            return format_html('約 ${} (1K入力+1K出力)', f'{cost:.6f}')
+        return '-'
+    estimated_cost_display.short_description = '推定コスト例'
 

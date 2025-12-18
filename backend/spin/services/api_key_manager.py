@@ -4,7 +4,7 @@ OpenAI APIキー管理サービス
 """
 import logging
 from typing import Optional, Tuple
-from spin.models import OpenAIAPIKey
+from spin.models import OpenAIAPIKey, ModelConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,13 @@ class APIKeyManager:
         """
         用途に応じたAPIキーとモデル名を取得
         
+        優先順位:
+        1. ModelConfigurationで設定されたモデル（最優先）
+        2. 指定された用途のデフォルトAPIキー
+        3. 指定された用途の有効なAPIキー
+        4. 汎用のデフォルトAPIキー
+        5. 汎用の有効なAPIキー
+        
         Args:
             purpose: APIキーの用途 ('spin_generation', 'chat', 'scoring', 'scraping_analysis', 'general')
         
@@ -25,6 +32,40 @@ class APIKeyManager:
             見つからない場合は (None, None)
         """
         try:
+            # 0. ModelConfigurationから推奨モデルを取得（最優先）
+            preferred_model = None
+            try:
+                model_config = ModelConfiguration.objects.get(purpose=purpose, is_active=True)
+                preferred_model = model_config.model_name
+                logger.info(f"ModelConfigurationから推奨モデルを取得: purpose={purpose}, model={preferred_model}")
+            except ModelConfiguration.DoesNotExist:
+                # ModelConfigurationがない場合は、デフォルトの推奨モデルを使用
+                preferred_model = ModelConfiguration.RECOMMENDED_MODELS.get(purpose)
+                if preferred_model:
+                    logger.info(f"デフォルト推奨モデルを使用: purpose={purpose}, model={preferred_model}")
+            
+            # 推奨モデルが設定されている場合、そのモデルを使用するAPIキーを優先的に探す
+            if preferred_model:
+                # 推奨モデルを使用する有効なAPIキーを探す
+                api_key_obj = OpenAIAPIKey.objects.filter(
+                    purpose=purpose,
+                    model_name=preferred_model,
+                    is_active=True
+                ).first()
+                
+                if api_key_obj:
+                    logger.info(
+                        f"推奨モデルのAPIキー取得成功: purpose={purpose}, "
+                        f"key_name={api_key_obj.name}, model={api_key_obj.model_name}"
+                    )
+                    return api_key_obj.api_key, api_key_obj.model_name
+                else:
+                    logger.warning(
+                        f"推奨モデル({preferred_model})のAPIキーが見つかりません。"
+                        f"他のモデルを使用します: purpose={purpose}"
+                    )
+            
+            # 推奨モデルのAPIキーがない場合、従来の方法でAPIキーを探す
             # 1. 指定された用途のデフォルトキーを探す
             api_key_obj = OpenAIAPIKey.objects.filter(
                 purpose=purpose,

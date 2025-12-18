@@ -1,7 +1,8 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
+from rest_framework.authentication import SessionAuthentication
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.contrib.auth import authenticate
@@ -60,6 +61,7 @@ def health(request):
 
 
 @api_view(['POST'])
+@authentication_classes([])  # CSRFトークン不要
 @permission_classes([AllowAny])
 def register_user(request):
     """ユーザー登録エンドポイント"""
@@ -119,6 +121,7 @@ def register_user(request):
 
 
 @api_view(['POST'])
+@authentication_classes([])  # CSRFトークン不要
 @permission_classes([AllowAny])
 def login_user(request):
     """ログインエンドポイント"""
@@ -284,7 +287,26 @@ def chat_session(request):
     try:
         conversation_history = list(messages) + [salesperson_msg]
         customer_response = generate_customer_response(session, conversation_history)
-        
+    except ValueError as e:
+        # コンテキスト長超過などの明確なエラー
+        logger.error(f"チャット送信エラー: Session {session_id}, Error: {str(e)}")
+        return Response({
+            "error": str(e),
+            "details": {
+                "message": [str(e)]
+            }
+        }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        # その他の予期しないエラー
+        logger.error(f"チャット送信エラー（予期しない）: Session {session_id}, Error: {str(e)}", exc_info=True)
+        return Response({
+            "error": "メッセージ送信に失敗しました",
+            "details": {
+                "message": [f"エラーが発生しました: {str(e)}"]
+            }
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    try:
         # クロージングスタイルを判定（営業メッセージから）
         closing_style = None
         message_lower = message.lower()
