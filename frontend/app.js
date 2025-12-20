@@ -1,5 +1,9 @@
-// API設定（nginx経由でアクセスする場合は相対パスを使用）
-const API_BASE_URL = window.location.origin + '/api';
+// API設定
+// ローカル開発環境（ポート8080）の場合は直接Djangoサーバー（ポート8000）に接続
+// 本番環境（nginx経由）の場合は相対パスを使用
+const API_BASE_URL = (window.location.port === '8080' || window.location.hostname === 'localhost') 
+    ? 'http://localhost:8000/api' 
+    : window.location.origin + '/api';
 let authToken = localStorage.getItem('authToken');
 let currentSessionId = null;
 let currentReportId = null;
@@ -284,15 +288,16 @@ async function login() {
         console.log('Login response status:', response.status);
         console.log('Login response headers:', response.headers);
         
+        // レスポンスをテキストとして読み取り、その後JSONとして解析
+        const responseText = await response.text();
         let data;
         try {
-            data = await response.json();
+            data = JSON.parse(responseText);
             console.log('Login response data:', data);
         } catch (jsonError) {
             console.error('Failed to parse JSON response:', jsonError);
-            const text = await response.text();
-            console.error('Response text:', text);
-            showError('loginError', 'サーバーからの応答を解析できませんでした: ' + text);
+            console.error('Response text:', responseText);
+            showError('loginError', 'サーバーからの応答を解析できませんでした: ' + responseText);
             return;
         }
         

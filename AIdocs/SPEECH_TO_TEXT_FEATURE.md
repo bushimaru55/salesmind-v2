@@ -248,6 +248,5 @@ GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-credentials.json
 2025-12-20
 
 ## 更新履歴
-- 2025-12-20: 初版作成
-- 2025-01-XX: GCP Speech-to-Text API設定手順を追加
+- 2025-12-20: 初版作成（GCP Speech-to-Text API設定手順を含む）
 

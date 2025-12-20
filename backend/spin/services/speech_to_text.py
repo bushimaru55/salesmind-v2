@@ -33,12 +33,27 @@ def get_speech_client() -> Optional[speech.SpeechClient]:
         # 環境変数からサービスアカウントキーのパスを取得
         credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
         
-        if credentials_path and os.path.exists(credentials_path):
-            # サービスアカウントキーから認証情報を読み込む
-            credentials = service_account.Credentials.from_service_account_file(
-                credentials_path
-            )
-            client = speech.SpeechClient(credentials=credentials)
+        if credentials_path:
+            # 相対パスの場合は絶対パスに変換（Django settingsのBASE_DIRを基準に）
+            if not os.path.isabs(credentials_path):
+                # Django settingsからPROJECT_ROOTを取得
+                from django.conf import settings
+                if hasattr(settings, 'BASE_DIR'):
+                    # BASE_DIRはbackend/なので、その親（プロジェクトルート）から相対パスを解決
+                    from pathlib import Path
+                    project_root = Path(settings.BASE_DIR).parent
+                    credentials_path = str(project_root / credentials_path)
+            
+            if os.path.exists(credentials_path):
+                # サービスアカウントキーから認証情報を読み込む
+                credentials = service_account.Credentials.from_service_account_file(
+                    credentials_path
+                )
+                client = speech.SpeechClient(credentials=credentials)
+            else:
+                logger.warning(f'GCP認証情報ファイルが見つかりません: {credentials_path}')
+                # デフォルト認証を使用（GCP環境やgcloud認証済みの場合）
+                client = speech.SpeechClient()
         else:
             # デフォルト認証を使用（GCP環境やgcloud認証済みの場合）
             client = speech.SpeechClient()

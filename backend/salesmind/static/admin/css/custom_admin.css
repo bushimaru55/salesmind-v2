@@ -1,0 +1,456 @@
+/* Django管理画面の可読性向上用カスタムCSS */
+
+/* 全体のテキスト色を濃く */
+body {
+    color: #212529 !important;
+    font-size: 14px !important;
+    line-height: 1.6 !important;
+}
+
+/* ヘッダー */
+#header {
+    background: #417690 !important;
+    color: #ffffff !important;
+}
+
+#header h1, #header h1 a:link, #header h1 a:visited {
+    color: #ffffff !important;
+    font-weight: bold !important;
+}
+
+/* サイドバー */
+#user-tools {
+    color: #ffffff !important;
+}
+
+#user-tools a:link, #user-tools a:visited {
+    color: #ffffff !important;
+    font-weight: 500 !important;
+}
+
+/* メインコンテンツエリア */
+#content {
+    background: #ffffff !important;
+    color: #212529 !important;
+}
+
+/* テーブル */
+table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+}
+
+table thead th {
+    background: #f8f9fa !important;
+    color: #212529 !important;
+    font-weight: 600 !important;
+    border-bottom: 2px solid #dee2e6 !important;
+    padding: 12px !important;
+}
+
+table tbody td {
+    color: #212529 !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    padding: 10px 12px !important;
+}
+
+table tbody tr:hover {
+    background: #f8f9fa !important;
+}
+
+/* フォーム要素 */
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="url"],
+input[type="number"],
+textarea,
+select {
+    color: #212529 !important;
+    background-color: #ffffff !important;
+    border: 1px solid #ced4da !important;
+    padding: 8px 12px !important;
+    font-size: 14px !important;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus,
+input[type="url"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus {
+    border-color: #417690 !important;
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(65, 118, 144, 0.25) !important;
+}
+
+/* ラベル */
+label {
+    color: #212529 !important;
+    font-weight: 500 !important;
+    margin-bottom: 5px !important;
+}
+
+/* フィールドセット */
+fieldset {
+    border: 1px solid #dee2e6 !important;
+    border-radius: 4px !important;
+    padding: 15px !important;
+    margin-bottom: 20px !important;
+    background: #ffffff !important;
+}
+
+fieldset legend {
+    color: #212529 !important;
+    font-weight: 600 !important;
+    font-size: 16px !important;
+    padding: 0 10px !important;
+}
+
+/* ヘルプテキスト */
+.help, .help-text, .help-block {
+    color: #6c757d !important;
+    font-size: 13px !important;
+    margin-top: 5px !important;
+}
+
+/* ボタン */
+.button, input[type="submit"], .submit-row input {
+    background: #417690 !important;
+    color: #ffffff !important;
+    border: none !important;
+    padding: 10px 20px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+}
+
+.button:hover, input[type="submit"]:hover, .submit-row input:hover {
+    background: #205067 !important;
+}
+
+.button.default, input[type="submit"].default, .submit-row input.default {
+    background: #417690 !important;
+}
+
+/* リンク */
+a:link {
+    color: #417690 !important;
+    text-decoration: none !important;
+}
+
+a:visited {
+    color: #5a8ca8 !important;
+}
+
+a:hover {
+    color: #205067 !important;
+    text-decoration: underline !important;
+}
+
+/* メッセージ */
+.messagelist li {
+    color: #212529 !important;
+    background: #d4edda !important;
+    border: 1px solid #c3e6cb !important;
+    padding: 12px 20px !important;
+    margin-bottom: 10px !important;
+    border-radius: 4px !important;
+}
+
+.messagelist li.error {
+    background: #f8d7da !important;
+    border-color: #f5c6cb !important;
+    color: #721c24 !important;
+}
+
+.messagelist li.warning {
+    background: #fff3cd !important;
+    border-color: #ffeaa7 !important;
+    color: #856404 !important;
+}
+
+.messagelist li.info {
+    background: #d1ecf1 !important;
+    border-color: #bee5eb !important;
+    color: #0c5460 !important;
+}
+
+/* フィールドラッパー */
+.form-row {
+    margin-bottom: 15px !important;
+}
+
+.form-row label {
+    color: #212529 !important;
+    font-weight: 500 !important;
+    display: block !important;
+    margin-bottom: 5px !important;
+}
+
+/* 読み取り専用フィールド */
+.readonly {
+    background: #f8f9fa !important;
+    color: #495057 !important;
+    border: 1px solid #dee2e6 !important;
+    padding: 8px 12px !important;
+}
+
+/* インライン */
+.inline-group {
+    border: 1px solid #dee2e6 !important;
+    border-radius: 4px !important;
+    padding: 15px !important;
+    background: #ffffff !important;
+}
+
+.inline-group h2 {
+    color: #212529 !important;
+    font-weight: 600 !important;
+    font-size: 16px !important;
+    margin-bottom: 15px !important;
+}
+
+/* ページネーション */
+.paginator {
+    color: #212529 !important;
+    margin: 20px 0 !important;
+}
+
+.paginator a {
+    color: #417690 !important;
+    padding: 6px 12px !important;
+    border: 1px solid #dee2e6 !important;
+    border-radius: 4px !important;
+    margin: 0 2px !important;
+}
+
+.paginator a:hover {
+    background: #f8f9fa !important;
+    border-color: #417690 !important;
+}
+
+.paginator .this-page {
+    background: #417690 !important;
+    color: #ffffff !important;
+    border-color: #417690 !important;
+}
+
+/* フィルター */
+.filtered {
+    background: #ffffff !important;
+}
+
+#changelist-filter {
+    background: #f8f9fa !important;
+    border-left: 1px solid #dee2e6 !important;
+}
+
+#changelist-filter h2 {
+    color: #212529 !important;
+    font-weight: 600 !important;
+    font-size: 14px !important;
+    padding: 10px 15px !important;
+    background: #e9ecef !important;
+    border-bottom: 1px solid #dee2e6 !important;
+}
+
+#changelist-filter h3 {
+    color: #495057 !important;
+    font-weight: 500 !important;
+    font-size: 13px !important;
+    margin-top: 15px !important;
+    margin-bottom: 8px !important;
+    padding: 0 15px !important;
+}
+
+#changelist-filter li {
+    padding: 5px 15px !important;
+}
+
+#changelist-filter li.selected a {
+    color: #417690 !important;
+    font-weight: 500 !important;
+}
+
+#changelist-filter a {
+    color: #212529 !important;
+}
+
+#changelist-filter a:hover {
+    color: #417690 !important;
+}
+
+/* 検索ボックス */
+#searchbar {
+    border: 1px solid #ced4da !important;
+    color: #212529 !important;
+    padding: 8px 12px !important;
+    font-size: 14px !important;
+}
+
+#searchbar:focus {
+    border-color: #417690 !important;
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(65, 118, 144, 0.25) !important;
+}
+
+/* アクションバー */
+.actions {
+    background: #f8f9fa !important;
+    border: 1px solid #dee2e6 !important;
+    padding: 10px 15px !important;
+    margin-bottom: 15px !important;
+    border-radius: 4px !important;
+}
+
+.actions select {
+    color: #212529 !important;
+    border: 1px solid #ced4da !important;
+}
+
+.actions button {
+    background: #417690 !important;
+    color: #ffffff !important;
+    border: none !important;
+    padding: 6px 15px !important;
+    border-radius: 4px !important;
+    font-size: 13px !important;
+}
+
+.actions button:hover {
+    background: #205067 !important;
+}
+
+/* チェックボックスとラジオボタン */
+input[type="checkbox"],
+input[type="radio"] {
+    width: 18px !important;
+    height: 18px !important;
+    cursor: pointer !important;
+}
+
+/* エラーメッセージ */
+.errorlist {
+    color: #dc3545 !important;
+    background: #f8d7da !important;
+    border: 1px solid #f5c6cb !important;
+    padding: 10px 15px !important;
+    border-radius: 4px !important;
+    margin: 10px 0 !important;
+}
+
+.errorlist li {
+    color: #721c24 !important;
+    list-style: none !important;
+}
+
+/* インラインエラー */
+.form-row .errors {
+    color: #dc3545 !important;
+    font-size: 13px !important;
+    margin-top: 5px !important;
+}
+
+/* プレースホルダー */
+::placeholder {
+    color: #6c757d !important;
+    opacity: 0.7 !important;
+}
+
+/* コード表示 */
+code {
+    background: #f8f9fa !important;
+    color: #212529 !important;
+    padding: 2px 6px !important;
+    border-radius: 3px !important;
+    font-family: 'Courier New', monospace !important;
+    font-size: 13px !important;
+}
+
+/* 太字テキスト */
+strong, b {
+    color: #212529 !important;
+    font-weight: 600 !important;
+}
+
+/* 見出し */
+h1, h2, h3, h4, h5, h6 {
+    color: #212529 !important;
+    font-weight: 600 !important;
+}
+
+/* 説明テキスト */
+.description {
+    color: #6c757d !important;
+    font-size: 13px !important;
+    margin-top: 5px !important;
+}
+
+/* 選択された行 */
+.selected {
+    background: #e7f3ff !important;
+}
+
+/* ツールバー */
+.object-tools {
+    margin-bottom: 15px !important;
+}
+
+.object-tools a {
+    background: #417690 !important;
+    color: #ffffff !important;
+    padding: 8px 15px !important;
+    border-radius: 4px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+}
+
+.object-tools a:hover {
+    background: #205067 !important;
+    color: #ffffff !important;
+}
+
+/* JSONフィールドの表示 */
+.json-field {
+    background: #f8f9fa !important;
+    color: #212529 !important;
+    border: 1px solid #dee2e6 !important;
+    padding: 10px !important;
+    border-radius: 4px !important;
+    font-family: 'Courier New', monospace !important;
+    font-size: 13px !important;
+}
+
+/* テーブルのインライン編集 */
+.inline-related {
+    border: 1px solid #dee2e6 !important;
+    border-radius: 4px !important;
+    padding: 15px !important;
+    margin-bottom: 15px !important;
+    background: #ffffff !important;
+}
+
+/* 日付時刻ピッカー */
+.datetime {
+    color: #212529 !important;
+}
+
+/* ファイルアップロード */
+.file-upload {
+    border: 1px dashed #ced4da !important;
+    padding: 20px !important;
+    border-radius: 4px !important;
+    background: #f8f9fa !important;
+}
+
+/* タブ */
+.tab-content {
+    background: #ffffff !important;
+    border: 1px solid #dee2e6 !important;
+    border-radius: 4px !important;
+    padding: 15px !important;
+}
+

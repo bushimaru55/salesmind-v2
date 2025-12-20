@@ -13,6 +13,9 @@ services:
       - ./backend/salesmind-481802-2edf66e5244d.json:/app/salesmind-481802-2edf66e5244d.json:ro
     env_file:
       - .env
+    environment:
+      # Docker環境ではコンテナ内のパスを使用
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/salesmind-481802-2edf66e5244d.json
     depends_on:
       - db
     networks:

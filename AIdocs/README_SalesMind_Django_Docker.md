@@ -11,6 +11,7 @@
 |------|------|------|
 | Backend | Django 5 + Django REST Framework | APIエンドポイント構築用 |
 | AI | OpenAI GPT-4o-mini | SPIN質問生成・顧客ロールプレイ・スコアリング |
+| Speech-to-Text | GCP Speech-to-Text API | 音声テキスト変換（2025-12-20追加） |
 | Database | PostgreSQL 16 | Docker環境標準（ローカル開発時のみSQLite可） |
 | Infra | Docker Compose | web＋db＋frontendの3コンテナ構成 |
 | Frontend | 静的HTML/JS/CSS | nginxで配信 |
@@ -103,12 +104,34 @@ networks:
 **backend/Dockerfile**
 ```dockerfile
 FROM python:3.11-slim
+
+# 作業ディレクトリを設定
 WORKDIR /app
+
+# システムパッケージの更新と必要なツールのインストール
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python依存パッケージのインストール
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# アプリケーションコードのコピー
 COPY . .
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+
+# ポート8000を公開
+EXPOSE 8000
+
+# デフォルトコマンド（docker-compose.ymlで上書き可能）
+# Cloud Run でも利用できるよう gunicorn を使用
+CMD ["gunicorn", "salesmind.wsgi:application", "--bind", "0.0.0.0:${PORT:-8000}"]
 ```
+
+**システムパッケージの説明:**
+- `postgresql-client`: PostgreSQL接続用クライアント
+- `ffmpeg`: 音声ファイル変換用（pydubでWEBM→WAV変換に必要）
 
 ---
 
@@ -120,6 +143,11 @@ SECRET_KEY=your-secret-key-here-change-in-production
 
 # OpenAI API設定
 OPENAI_API_KEY=sk-xxxxx
+
+# GCP Speech-to-Text API設定（音声入力機能用）
+# ローカル環境: プロジェクトルートからの相対パス
+# Docker環境: コンテナ内のパス（/app/salesmind-xxxxx.json）
+GOOGLE_APPLICATION_CREDENTIALS=backend/salesmind-xxxxx.json
 
 # PostgreSQL設定（Docker環境用）
 POSTGRES_DB=salesmind
@@ -180,10 +208,26 @@ server {
 Django>=5.0
 djangorestframework
 openai
+anthropic>=0.18.0
 python-dotenv
 psycopg2-binary
 django-cors-headers
+beautifulsoup4>=4.12.0
+requests>=2.31.0
+lxml>=4.9.0
+gunicorn
+google-cloud-speech>=2.19.0
+pydub>=0.25.1
 ```
+
+**主要な依存パッケージの説明:**
+- `Django`, `djangorestframework`: Webフレームワーク
+- `openai`, `anthropic`: AIプロバイダーSDK
+- `google-cloud-speech`: GCP Speech-to-Text API（音声入力機能用）
+- `pydub`: 音声ファイル変換用（WEBM→WAV変換など）
+- `beautifulsoup4`, `lxml`: スクレイピング機能用
+- `psycopg2-binary`: PostgreSQL接続用
+- `gunicorn`: 本番環境用WSGIサーバー
 
 ---
 
@@ -252,6 +296,7 @@ Django標準認証を使用し、APIアクセスにはToken認証またはSessio
 - `POST /api/session/chat` - 商談対話
 - `POST /api/session/finish` - セッション終了
 - `GET /api/report/{id}` - レポート取得
+- `POST /api/speech/transcribe/` - 音声テキスト変換（2025-12-20追加）
 
 **認証が不要なエンドポイント:**
 - `POST /api/spin/generate` - SPIN質問生成（公開エンドポイント）
@@ -707,6 +752,59 @@ SPIN質問を生成するエンドポイント。認証不要。
 
 ---
 
+### POST /api/speech/transcribe
+音声ファイルをテキストに変換するエンドポイント。認証必須。
+
+**認証:**
+- ヘッダー: `Authorization: Token {token}` または Djangoセッション認証
+
+**リクエスト:**
+- **Content-Type**: `multipart/form-data`
+- **Body**:
+  - `audio`: 音声ファイル（WAV、MP3、FLAC、WEBMなど）
+  - `language_code`: 言語コード（オプション、デフォルト: `ja-JP`）
+
+**リクエストバリデーション:**
+- `audio`: 必須、音声ファイル、最大10MB
+- `language_code`: オプション、文字列（例: `ja-JP`, `en-US`）
+
+**成功レスポンス (200 OK):**
+```json
+{
+  "text": "変換されたテキスト",
+  "confidence": 0.95
+}
+```
+
+**エラーレスポンス:**
+- `401 Unauthorized`: 認証エラー
+  ```json
+  {
+    "error": "Authentication required"
+  }
+  ```
+- `400 Bad Request`: バリデーションエラー
+  ```json
+  {
+    "error": "音声ファイルが送信されていません",
+    "detail": "audioフィールドに音声ファイルを添付してください"
+  }
+  ```
+- `500 Internal Server Error`: GCP Speech-to-Text API呼び出しエラー
+  ```json
+  {
+    "error": "音声変換に失敗しました",
+    "detail": "エラー詳細"
+  }
+  ```
+
+**技術詳細:**
+- GCP Speech-to-Text APIを使用
+- WEBM OPUS形式の場合は自動的にWAV形式に変換
+- 詳細は `AIdocs/SPEECH_TO_TEXT_FEATURE.md` を参照
+
+---
+
 ### API共通仕様
 
 **認証方式:**
@@ -732,7 +830,7 @@ SPIN質問を生成するエンドポイント。認証不要。
 - `500 Internal Server Error`: サーバー内部エラー
 
 **Content-Type:**
-- リクエスト: `application/json`
+- リクエスト: `application/json`（音声変換APIは `multipart/form-data`）
 - レスポンス: `application/json`
 
 ---
