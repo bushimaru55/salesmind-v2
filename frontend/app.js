@@ -2808,3 +2808,230 @@ checkAuth = function() {
     originalCheckAuthForSidebar.call(this);
     updateSidebarUserState();
 };
+
+// ==================== 音声入力機能 ====================
+
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+let recordingStartTime = null;
+let recordingTimer = null;
+
+// 音声録音の開始/停止
+async function toggleVoiceRecording() {
+    if (!authToken) {
+        alert('ログインしてください');
+        return;
+    }
+    
+    if (isRecording) {
+        // 録音停止
+        stopRecording();
+    } else {
+        // 録音開始
+        await startRecording();
+    }
+}
+
+// 録音開始
+async function startRecording() {
+    try {
+        // マイクアクセス許可を取得
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // MediaRecorderを初期化
+        // 優先順位: webm opus > webm > デフォルト
+        let options = {};
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+            options.mimeType = 'audio/webm;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+            options.mimeType = 'audio/webm';
+        } else {
+            // デフォルトを使用
+            options.mimeType = '';
+        }
+        
+        // 音声品質の設定（オプション）
+        if (options.mimeType) {
+            options.audioBitsPerSecond = 128000; // 128kbps
+        }
+        
+        mediaRecorder = new MediaRecorder(stream, options);
+        audioChunks = [];
+        
+        // データが利用可能になったときの処理
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                audioChunks.push(event.data);
+            }
+        };
+        
+        // 録音停止時の処理
+        mediaRecorder.onstop = async () => {
+            // ストリームを停止
+            stream.getTracks().forEach(track => track.stop());
+            
+            // 音声データをBlobに変換
+            const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+            
+            // バックエンドに送信してテキスト変換
+            await transcribeAudio(audioBlob);
+            
+            // タイマーを停止
+            if (recordingTimer) {
+                clearInterval(recordingTimer);
+                recordingTimer = null;
+            }
+            
+            // UIを更新
+            updateRecordingUI(false);
+        };
+        
+        // 録音開始
+        mediaRecorder.start();
+        isRecording = true;
+        recordingStartTime = Date.now();
+        
+        // 録音時間の表示を開始
+        startRecordingTimer();
+        
+        // UIを更新
+        updateRecordingUI(true);
+        
+        if (window.logger) {
+            window.logger.info('音声録音を開始しました');
+        }
+    } catch (error) {
+        console.error('録音開始エラー:', error);
+        if (window.logger) {
+            window.logger.error('録音開始エラー', { error: error.message });
+        }
+        
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            alert('マイクへのアクセスが拒否されました。\nブラウザの設定でマイクのアクセス許可を有効にしてください。');
+        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+            alert('マイクが見つかりませんでした。\nマイクが接続されているか確認してください。');
+        } else {
+            alert('録音を開始できませんでした: ' + error.message);
+        }
+    }
+}
+
+// 録音停止
+function stopRecording() {
+    if (mediaRecorder && isRecording) {
+        mediaRecorder.stop();
+        isRecording = false;
+        
+        if (window.logger) {
+            window.logger.info('音声録音を停止しました');
+        }
+    }
+}
+
+// 録音時間のタイマー
+function startRecordingTimer() {
+    const timeDisplay = document.getElementById('recordingTime');
+    if (!timeDisplay) return;
+    
+    recordingTimer = setInterval(() => {
+        if (recordingStartTime) {
+            const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            timeDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+    }, 100);
+}
+
+// 録音UIの更新
+function updateRecordingUI(recording) {
+    const micButton = document.getElementById('micButton');
+    const timeDisplay = document.getElementById('recordingTime');
+    
+    if (micButton) {
+        if (recording) {
+            micButton.classList.add('recording');
+            micButton.innerHTML = '<i class="fas fa-stop"></i>';
+            micButton.title = '録音を停止';
+        } else {
+            micButton.classList.remove('recording');
+            micButton.innerHTML = '<i class="fas fa-microphone"></i>';
+            micButton.title = '音声入力';
+        }
+    }
+    
+    if (timeDisplay) {
+        timeDisplay.style.display = recording ? 'inline-block' : 'none';
+        if (!recording) {
+            timeDisplay.textContent = '00:00';
+        }
+    }
+}
+
+// 音声をテキストに変換
+async function transcribeAudio(audioBlob) {
+    const messageInput = document.getElementById('chatMessageInput');
+    if (!messageInput) return;
+    
+    try {
+        // ローディング表示
+        if (messageInput) {
+            messageInput.placeholder = '音声を変換中...';
+            messageInput.disabled = true;
+        }
+        
+        // FormDataを作成
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.webm');
+        formData.append('language_code', 'ja-JP');
+        
+        // バックエンドに送信
+        const response = await fetch(`${API_BASE_URL}/speech/transcribe/`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Token ${authToken}`
+            },
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            if (data.text && data.text.trim().length > 0) {
+                // 変換されたテキストを入力欄に設定
+                messageInput.value = data.text;
+                messageInput.placeholder = '営業担当者の質問を入力...';
+                messageInput.disabled = false;
+                
+                // 入力欄にフォーカス
+                messageInput.focus();
+                
+                if (window.logger) {
+                    window.logger.info('音声変換成功', { 
+                        text_length: data.text.length,
+                        confidence: data.confidence 
+                    });
+                }
+            } else {
+                // テキストが空の場合
+                throw new Error('音声が認識できませんでした。音声が短すぎるか、無音の可能性があります。もう一度録音してください。');
+            }
+        } else {
+            throw new Error(data.error || data.detail || '音声変換に失敗しました');
+        }
+    } catch (error) {
+        console.error('音声変換エラー:', error);
+        if (window.logger) {
+            window.logger.error('音声変換エラー', { error: error.message });
+        }
+        
+        alert('音声変換に失敗しました: ' + error.message);
+        
+        // 入力欄を復元
+        if (messageInput) {
+            messageInput.placeholder = '営業担当者の質問を入力...';
+            messageInput.disabled = false;
+        }
+    }
+}

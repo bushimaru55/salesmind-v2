@@ -6,6 +6,7 @@ WORKDIR /app
 # システムパッケージの更新と必要なツールのインストール
 RUN apt-get update && apt-get install -y \
     postgresql-client \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Python依存パッケージのインストール

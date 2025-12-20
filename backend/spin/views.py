@@ -42,6 +42,8 @@ from .services.scraper import scrape_company_info, scrape_multiple_urls
 from .services.sitemap_parser import parse_sitemap_from_file, parse_sitemap_from_url, parse_sitemap_index
 from .services.company_analyzer import analyze_spin_suitability
 from .services.conversation_analysis import analyze_sales_message
+from .services.speech_to_text import transcribe_audio, detect_audio_encoding
+from google.cloud import speech
 from .exceptions import OpenAIAPIError, SessionNotFoundError, SessionFinishedError, NoConversationHistoryError
 
 logger = logging.getLogger(__name__)
@@ -1202,4 +1204,88 @@ def get_detailed_ranking(request):
         return Response({
             "error": "Failed to get ranking",
             "message": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def transcribe_speech(request):
+    """
+    音声をテキストに変換するエンドポイント
+    
+    - URL: /api/speech/transcribe/
+    - Method: POST
+    - Authentication: Token認証必須
+    - Content-Type: multipart/form-data
+    - Body:
+      - audio: 音声ファイル（WAV、MP3、FLACなど）
+      - language_code: 言語コード（オプション、デフォルト: ja-JP）
+    
+    Response:
+    {
+        "text": "変換されたテキスト",
+        "confidence": 0.95
+    }
+    """
+    try:
+        # 音声ファイルを取得
+        if 'audio' not in request.FILES:
+            return Response({
+                "error": "音声ファイルが送信されていません",
+                "detail": "audioフィールドに音声ファイルを添付してください"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        audio_file = request.FILES['audio']
+        
+        # ファイルサイズチェック（10MB制限）
+        max_size = 10 * 1024 * 1024  # 10MB
+        if audio_file.size > max_size:
+            return Response({
+                "error": "ファイルサイズが大きすぎます",
+                "detail": f"ファイルサイズは{max_size / 1024 / 1024}MB以下にしてください"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 言語コードを取得（デフォルト: ja-JP）
+        language_code = request.data.get('language_code', 'ja-JP')
+        
+        # 音声データを読み込む
+        audio_data = audio_file.read()
+        
+        # エンコーディングを検出
+        encoding = detect_audio_encoding(audio_data)
+        
+        # WEBM OPUS形式の場合は、WAV形式に変換してから送信
+        # GCP Speech-to-Text APIのWEBM OPUSサポートが不安定な場合があるため
+        sample_rate_hertz = 16000  # デフォルトのサンプリングレート
+        if encoding == speech.RecognitionConfig.AudioEncoding.WEBM_OPUS:
+            try:
+                from .services.speech_to_text import convert_webm_to_wav
+                logger.info('WEBM OPUS形式を検出。WAV形式に変換します。')
+                audio_data, sample_rate_hertz = convert_webm_to_wav(audio_data)
+                encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
+                logger.info(f'WAV形式への変換が完了しました。サンプリングレート: {sample_rate_hertz}Hz')
+            except Exception as e:
+                logger.warning(f'WAV形式への変換に失敗しました。元の形式で続行します: {str(e)}')
+                # 変換に失敗した場合は、元の形式で続行
+        
+        # 音声をテキストに変換
+        result = transcribe_audio(
+            audio_data=audio_data,
+            language_code=language_code,
+            encoding=encoding,
+            sample_rate_hertz=sample_rate_hertz
+        )
+        
+        logger.info(f"音声変換成功: user={request.user.username}, text_length={len(result['text'])}")
+        
+        return Response({
+            "text": result['text'],
+            "confidence": result['confidence']
+        }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        logger.error(f"音声変換エラー: {e}", exc_info=True)
+        return Response({
+            "error": "音声変換に失敗しました",
+            "detail": str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

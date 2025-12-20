@@ -32,5 +32,8 @@ urlpatterns = [
     # ランキング関連
     path('ranking/simple/', views.get_simple_ranking, name='get_simple_ranking'),
     path('ranking/detailed/', views.get_detailed_ranking, name='get_detailed_ranking'),
+
+    # 音声変換
+    path('speech/transcribe/', views.transcribe_speech, name='transcribe_speech'),
 ]
 
