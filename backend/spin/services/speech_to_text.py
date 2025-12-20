@@ -282,20 +282,48 @@ def detect_audio_encoding(audio_data: bytes) -> speech.RecognitionConfig.AudioEn
     
     Returns:
         AudioEncoding: 検出されたエンコーディング
+    
+    Raises:
+        ValueError: 音声データが空または無効な場合
     """
-    # WEBMファイルの場合はWEBM_OPUSを想定（MediaRecorder APIで録音された場合）
-    if audio_data[:4] == b'\x1a\x45\xdf\xa3' or b'webm' in audio_data[:1024].lower():
+    # 空のデータチェック
+    if not audio_data:
+        raise ValueError('音声データが空です')
+    
+    # 最小サイズチェック（4バイト未満の場合は判定不可）
+    if len(audio_data) < 4:
+        logger.warning(f'音声データが短すぎます（{len(audio_data)} bytes）。デフォルトのWEBM_OPUSとして扱います')
         return speech.RecognitionConfig.AudioEncoding.WEBM_OPUS
-    # WAVファイルの場合はLINEAR16を想定
-    elif audio_data[:4] == b'RIFF' and audio_data[8:12] == b'WAVE':
-        return speech.RecognitionConfig.AudioEncoding.LINEAR16
-    # MP3ファイルの場合はMP3を想定
-    elif audio_data[:3] == b'ID3' or audio_data[:2] == b'\xff\xfb':
-        return speech.RecognitionConfig.AudioEncoding.MP3
-    # FLACファイルの場合はFLACを想定
-    elif audio_data[:4] == b'fLaC':
-        return speech.RecognitionConfig.AudioEncoding.FLAC
-    # デフォルトはWEBM_OPUS（MediaRecorder APIのデフォルト形式）
-    else:
+    
+    try:
+        # WEBMファイルの場合はWEBM_OPUSを想定（MediaRecorder APIで録音された場合）
+        if len(audio_data) >= 4 and audio_data[:4] == b'\x1a\x45\xdf\xa3':
+            return speech.RecognitionConfig.AudioEncoding.WEBM_OPUS
+        # WEBM文字列チェック（最初の1024バイト内）
+        if len(audio_data) >= 1024 and b'webm' in audio_data[:1024].lower():
+            return speech.RecognitionConfig.AudioEncoding.WEBM_OPUS
+        elif len(audio_data) < 1024 and b'webm' in audio_data.lower():
+            return speech.RecognitionConfig.AudioEncoding.WEBM_OPUS
+        
+        # WAVファイルの場合はLINEAR16を想定
+        if len(audio_data) >= 12 and audio_data[:4] == b'RIFF' and audio_data[8:12] == b'WAVE':
+            return speech.RecognitionConfig.AudioEncoding.LINEAR16
+        
+        # MP3ファイルの場合はMP3を想定
+        if len(audio_data) >= 3 and audio_data[:3] == b'ID3':
+            return speech.RecognitionConfig.AudioEncoding.MP3
+        if len(audio_data) >= 2 and audio_data[:2] == b'\xff\xfb':
+            return speech.RecognitionConfig.AudioEncoding.MP3
+        
+        # FLACファイルの場合はFLACを想定
+        if len(audio_data) >= 4 and audio_data[:4] == b'fLaC':
+            return speech.RecognitionConfig.AudioEncoding.FLAC
+        
+        # デフォルトはWEBM_OPUS（MediaRecorder APIのデフォルト形式）
+        logger.info(f'音声形式を検出できませんでした（サイズ: {len(audio_data)} bytes）。デフォルトのWEBM_OPUSとして扱います')
+        return speech.RecognitionConfig.AudioEncoding.WEBM_OPUS
+    except Exception as e:
+        logger.error(f'音声エンコーディング検出エラー: {str(e)}')
+        # エラーが発生した場合はデフォルトのWEBM_OPUSを返す
         return speech.RecognitionConfig.AudioEncoding.WEBM_OPUS
 

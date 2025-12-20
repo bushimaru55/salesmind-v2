@@ -16,10 +16,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # アプリケーションコードのコピー
 COPY . .
 
+# エントリーポイントスクリプトをコピーして実行可能にする
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # ポート8000を公開
 EXPOSE 8000
 
-# デフォルトコマンド（docker-compose.ymlで上書き可能）
-# Cloud Run でも利用できるよう gunicorn を使用
-CMD ["gunicorn", "salesmind.wsgi:application", "--bind", "0.0.0.0:${PORT:-8000}"]
+# エントリーポイントを設定
+ENTRYPOINT ["/app/entrypoint.sh"]
 

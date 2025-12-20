@@ -1,0 +1,268 @@
+/* Django管理画面の可読性向上 - 最小限の調整 */
+
+/* ====================================
+   上部ヘッダーとタイトル
+   ==================================== */
+h1 {
+    color: #212529 !important;
+    font-weight: 600 !important;
+}
+
+#content h1 {
+    color: #212529 !important;
+    font-weight: 600 !important;
+    font-size: 24px !important;
+}
+
+/* ページタイトルバー（changelist-headerなど） */
+.changelist-header,
+.object-tools,
+.submit-row {
+    background: #f8f9fa !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    padding: 16px 20px !important;
+}
+
+.changelist-header h1,
+.changelist-header h2 {
+    color: #212529 !important;
+    font-weight: 600 !important;
+    margin: 0 !important;
+}
+
+/* ====================================
+   情報バナーとメッセージ
+   ==================================== */
+.messagelist {
+    margin-bottom: 20px !important;
+}
+
+.messagelist li {
+    padding: 12px 16px !important;
+    margin-bottom: 8px !important;
+    border-radius: 4px !important;
+    font-weight: 500 !important;
+}
+
+.messagelist li.info {
+    background: #d1ecf1 !important;
+    color: #0c5460 !important;
+    border: 1px solid #bee5eb !important;
+}
+
+.messagelist li.success {
+    background: #d4edda !important;
+    color: #155724 !important;
+    border: 1px solid #c3e6cb !important;
+}
+
+.messagelist li.warning {
+    background: #fff3cd !important;
+    color: #856404 !important;
+    border: 1px solid #ffeaa7 !important;
+}
+
+.messagelist li.error {
+    background: #f8d7da !important;
+    color: #721c24 !important;
+    border: 1px solid #f5c6cb !important;
+}
+
+/* システムメッセージ（上部の黄色いバナーなど） */
+.system-message,
+.help-block,
+.help {
+    color: #495057 !important;
+    background: #fff3cd !important;
+    border: 1px solid #ffeaa7 !important;
+    padding: 12px 16px !important;
+    border-radius: 4px !important;
+    margin-bottom: 16px !important;
+}
+
+.system-message p,
+.help-block p,
+.help p {
+    color: #856404 !important;
+    font-weight: 500 !important;
+    margin: 0 !important;
+}
+
+/* ====================================
+   検索バーとアクションバー
+   ==================================== */
+#changelist-search {
+    background: #ffffff !important;
+    border: 1px solid #ced4da !important;
+    color: #212529 !important;
+    padding: 8px 12px !important;
+    font-size: 14px !important;
+}
+
+#changelist-search:focus {
+    border-color: #417690 !important;
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(65, 118, 144, 0.25) !important;
+}
+
+#changelist-search::placeholder {
+    color: #6c757d !important;
+    opacity: 0.8 !important;
+}
+
+/* アクションバー */
+.actions {
+    background: #ffffff !important;
+    border: 1px solid #dee2e6 !important;
+    padding: 12px 16px !important;
+    margin-bottom: 16px !important;
+}
+
+.actions label,
+.actions select {
+    color: #212529 !important;
+    font-weight: 500 !important;
+}
+
+.actions select {
+    background: #ffffff !important;
+    border: 1px solid #ced4da !important;
+    color: #212529 !important;
+    padding: 6px 10px !important;
+}
+
+/* ====================================
+   テーブルヘッダー
+   ==================================== */
+#result_list thead th {
+    background: #f8f9fa !important;
+    color: #212529 !important;
+    font-weight: 600 !important;
+    border-bottom: 2px solid #dee2e6 !important;
+    padding: 12px !important;
+}
+
+/* ====================================
+   フィルターパネル（右側）
+   ==================================== */
+#changelist-filter {
+    background: #f8f9fa !important;
+}
+
+#changelist-filter h2 {
+    background: #417690 !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    padding: 12px 16px !important;
+}
+
+#changelist-filter h3 {
+    color: #212529 !important;
+    font-weight: 600 !important;
+    margin-top: 16px !important;
+    margin-bottom: 8px !important;
+    padding: 0 16px !important;
+}
+
+#changelist-filter li {
+    padding: 6px 16px !important;
+}
+
+#changelist-filter a {
+    color: #417690 !important;
+    text-decoration: none !important;
+}
+
+#changelist-filter li.selected a {
+    color: #212529 !important;
+    font-weight: 600 !important;
+}
+
+#changelist-filter a:hover {
+    color: #205067 !important;
+    text-decoration: underline !important;
+}
+
+/* ====================================
+   ボタン
+   ==================================== */
+.button,
+input[type="submit"],
+.addlink {
+    background: #417690 !important;
+    color: #ffffff !important;
+    border: none !important;
+    padding: 10px 20px !important;
+    font-weight: 500 !important;
+    border-radius: 4px !important;
+}
+
+.button:hover,
+input[type="submit"]:hover,
+.addlink:hover {
+    background: #205067 !important;
+    color: #ffffff !important;
+}
+
+/* ====================================
+   全体的なテキスト可読性向上
+   ==================================== */
+body {
+    color: #212529 !important;
+}
+
+#content {
+    color: #212529 !important;
+}
+
+#content p,
+#content div,
+#content span {
+    color: #212529 !important;
+}
+
+/* リンク */
+a {
+    color: #417690 !important;
+}
+
+a:hover {
+    color: #205067 !important;
+}
+
+/* ====================================
+   Macのダークモード対応
+   ==================================== */
+@media (prefers-color-scheme: dark) {
+    body {
+        background-color: #ffffff !important;
+        color: #212529 !important;
+    }
+    
+    #content {
+        background-color: #ffffff !important;
+        color: #212529 !important;
+    }
+    
+    h1,
+    #content h1,
+    .changelist-header h1,
+    .changelist-header h2 {
+        color: #212529 !important;
+    }
+    
+    .messagelist li,
+    .system-message,
+    .help-block,
+    .help {
+        color: #212529 !important;
+    }
+    
+    .actions,
+    #changelist-search,
+    .actions select {
+        background: #ffffff !important;
+        color: #212529 !important;
+    }
+}
+

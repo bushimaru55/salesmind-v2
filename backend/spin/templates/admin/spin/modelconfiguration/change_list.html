@@ -95,16 +95,6 @@
     <p>各機能で使用するOpenAIモデルを一括管理できます。推奨設定を適用することで、最適なコストと品質のバランスを実現できます。</p>
 </div>
 
-{% if show_init_button %}
-<div class="info-box" style="background: #fff3cd; border-left-color: #ffc107;">
-    <h4>⚠️ 初期設定が必要です</h4>
-    <p>モデル設定がまだ初期化されていません。以下のボタンをクリックして推奨設定を適用してください。</p>
-    <form method="post" action="{% url 'admin:spin_modelconfiguration_initialize' %}" style="margin-top: 10px;">
-        {% csrf_token %}
-        <button type="submit" class="action-button">推奨設定で初期化</button>
-    </form>
-</div>
-{% endif %}
 
 <div class="quick-actions">
     <h3>クイックアクション</h3>
@@ -113,33 +103,6 @@
         <button type="submit" class="action-button">✓ 全て推奨設定を適用</button>
     </form>
     <a href="{% url 'admin:spin_aiproviderkey_changelist' %}" class="action-button secondary">🔑 API統合管理</a>
-</div>
-
-<div class="info-box" style="background: #fff3cd; border-left-color: #ffc107;">
-    <h4>🔑 APIキーとモデルの関係</h4>
-    <p style="font-size: 13px; margin-bottom: 10px;">
-        モデル設定で選択できるモデルは、<strong>APIキー管理</strong>で登録されている有効なAPIキーのモデルのみです。
-    </p>
-    <ul style="font-size: 13px;">
-        <li>新しいモデルを使用したい場合は、まず<strong>APIキー管理</strong>でそのモデルのAPIキーを登録してください</li>
-        <li>各モデルに対応するAPIキーの数が表示されます</li>
-        <li>用途に合致するAPIキーがある場合は緑色（✓）で表示されます</li>
-        <li>汎用のAPIキーのみの場合は黄色（⚠️）で表示されます</li>
-        <li>APIキーがない場合は赤色（⚠️）で警告されます</li>
-    </ul>
-</div>
-
-<div class="info-box">
-    <h4>💡 推奨モデル構成</h4>
-    <ul>
-        <li><strong>SPIN質問生成:</strong> GPT-5.2（高品質な質問生成）</li>
-        <li><strong>チャット（顧客役）:</strong> GPT-4o-mini（高速応答・大量会話）</li>
-        <li><strong>スコアリング:</strong> GPT-5.2（正確な評価）</li>
-        <li><strong>スクレイピング分析:</strong> GPT-4o-mini（大量テキスト処理）</li>
-    </ul>
-    <p style="margin-top: 10px; font-size: 12px; color: #666;">
-        💰 推奨構成の想定コスト: 約$0.05/セッション
-    </p>
 </div>
 
 {{ block.super }}

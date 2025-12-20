@@ -6,9 +6,3 @@
 {% block branding %}
 <h1 id="site-name"><a href="{% url 'admin:index' %}">SalesMind 管理画面</a></h1>
 {% endblock %}
-
-{% block extrastyle %}
-{{ block.super }}
-<link rel="stylesheet" type="text/css" href="{% static 'admin/css/custom_admin.css' %}">
-{% endblock %}
-

@@ -11,4 +11,5 @@ lxml>=4.9.0
 gunicorn
 google-cloud-speech>=2.19.0
 pydub>=0.25.1
+django-admin-interface[colorfield]
 
