@@ -1205,7 +1205,7 @@ function proceedToChat() {
     initTemperatureScorePanel();
 }
 
-// ステップ3: チャット
+// ステップ3: チャット（ストリーミング対応）
 async function sendChatMessage() {
     if (!authToken || !currentSessionId) {
         alert('セッションを開始してください');
@@ -1224,10 +1224,26 @@ async function sendChatMessage() {
     addChatMessage('salesperson', message);
     messageInput.value = '';
     
-    showChatLoading();
+    // AI顧客のメッセージエリアを作成（ストリーミング用）
+    const customerMessageId = `customer-${Date.now()}`;
+    const customerMessageDiv = document.createElement('div');
+    customerMessageDiv.className = 'message customer';
+    customerMessageDiv.id = customerMessageId;
+    customerMessageDiv.innerHTML = `
+        <div class="message-header">
+            <span class="message-role">AI顧客</span>
+            <span class="message-time">${new Date().toLocaleTimeString('ja-JP')}</span>
+        </div>
+        <div class="message-content"></div>
+    `;
+    document.getElementById('chatMessages').appendChild(customerMessageDiv);
+    
+    const customerMessageContent = customerMessageDiv.querySelector('.message-content');
+    let fullResponse = '';
     
     try {
-        const response = await fetch(`${API_BASE_URL}/session/chat/`, {
+        // ストリーミングAPIを呼び出し
+        const response = await fetch(`${API_BASE_URL}/session/chat/stream/`, {
             method: 'POST',
             headers: {
                 'Authorization': `Token ${authToken}`,
@@ -1239,85 +1255,121 @@ async function sendChatMessage() {
             })
         });
         
-        const data = await response.json();
+        if (!response.ok) {
+            throw new Error('ストリーミングリクエストに失敗しました');
+        }
         
-        if (response.ok) {
-            // 会話履歴を更新
-            updateChatMessages(data.conversation);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        
+        while (true) {
+            const { done, value } = await reader.read();
             
-            // 温度スコアの更新
-            if (data.current_temperature !== undefined) {
-                updateTemperatureScore(data.current_temperature, data.temperature_details || {});
-            }
-            if (data.temperature_history && data.temperature_history.length > 0) {
-                updateTemperatureChart(data.temperature_history);
+            if (done) {
+                break;
             }
             
-            // 失注確定の場合、失注情報を表示
-            if (data.loss_response) {
-                displayLossResponse(data.loss_response);
-                if (data.should_end_session) {
-                    // セッション終了を促す
-                    setTimeout(() => {
-                        if (confirm('商談が失注となりました。セッションを終了してスコアリングに進みますか？')) {
-                            finishSession();
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop() || ''; // 最後の不完全な行を保持
+            
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        
+                        if (data.type === 'chunk') {
+                            fullResponse += data.content;
+                            // タイピング効果で表示
+                            customerMessageContent.textContent = fullResponse;
+                            // 自動スクロール
+                            const chatMessages = document.getElementById('chatMessages');
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                        } else if (data.type === 'done') {
+                            // ストリーミング完了
+                            fullResponse = data.full_response || fullResponse;
+                            customerMessageContent.textContent = fullResponse;
+                            
+                            // 温度スコアの更新
+                            if (data.current_temperature !== undefined) {
+                                updateTemperatureScore(data.current_temperature, data.temperature_details || {});
+                            }
+                            if (data.temperature_history && data.temperature_history.length > 0) {
+                                updateTemperatureChart(data.temperature_history);
+                            }
+                            
+                            // 失注確定の場合、失注情報を表示
+                            if (data.loss_response) {
+                                displayLossResponse(data.loss_response);
+                                if (data.should_end_session) {
+                                    setTimeout(() => {
+                                        if (confirm('商談が失注となりました。セッションを終了してスコアリングに進みますか？')) {
+                                            finishSession();
+                                        }
+                                    }, 2000);
+                                }
+                            }
+                            
+                            // クロージング提案がある場合は表示
+                            if (data.closing_proposal) {
+                                displayClosingProposal(data.closing_proposal);
+                            }
+                            
+                            // 会話フェーズがCLOSING_READYまたはCLOSING_ACTIONの場合、UIに表示
+                            if (data.conversation_phase === 'CLOSING_READY' || data.conversation_phase === 'CLOSING_ACTION') {
+                                showClosingPhaseIndicator(data.conversation_phase);
+                            }
+                            
+                            // 失注候補または失注確定の場合、UIに表示
+                            if (data.conversation_phase === 'LOSS_CANDIDATE' || data.conversation_phase === 'LOSS_CONFIRMED') {
+                                showLossPhaseIndicator(data.conversation_phase);
+                            }
+                            
+                            // 詳細診断モードの場合、成功率情報を更新
+                            if (currentMode === 'detailed' && data.success_probability !== undefined) {
+                                updateSuccessProbability(data.success_probability, data.success_delta, data.analysis_reason, {
+                                    currentStage: data.current_spin_stage,
+                                    messageSpinType: data.message_spin_type,
+                                    stepAppropriateness: data.step_appropriateness,
+                                    stageEvaluation: data.stage_evaluation,
+                                    sessionStage: data.session_spin_stage,
+                                    systemNotes: data.system_notes
+                                });
+                                
+                                if (window.logger) {
+                                    window.logger.info('成功率更新（ストリーミング）', {
+                                        success_probability: data.success_probability,
+                                        success_delta: data.success_delta,
+                                        analysis_reason: data.analysis_reason,
+                                        current_spin_stage: data.current_spin_stage,
+                                        message_spin_type: data.message_spin_type,
+                                        step_appropriateness: data.step_appropriateness,
+                                        stage_evaluation: data.stage_evaluation,
+                                        session_spin_stage: data.session_spin_stage,
+                                        conversation_phase: data.conversation_phase
+                                    });
+                                }
+                            }
+                        } else if (data.type === 'error') {
+                            throw new Error(data.error);
                         }
-                    }, 2000);
+                    } catch (e) {
+                        console.error('ストリームデータのパースエラー:', e);
+                        if (window.logger) {
+                            window.logger.error('ストリームデータのパースエラー', { error: e });
+                        }
+                    }
                 }
-            }
-            
-            // クロージング提案がある場合は表示
-            if (data.closing_proposal) {
-                displayClosingProposal(data.closing_proposal);
-            }
-            
-            // 会話フェーズがCLOSING_READYまたはCLOSING_ACTIONの場合、UIに表示
-            if (data.conversation_phase === 'CLOSING_READY' || data.conversation_phase === 'CLOSING_ACTION') {
-                showClosingPhaseIndicator(data.conversation_phase);
-            }
-            
-            // 失注候補または失注確定の場合、UIに表示
-            if (data.conversation_phase === 'LOSS_CANDIDATE' || data.conversation_phase === 'LOSS_CONFIRMED') {
-                showLossPhaseIndicator(data.conversation_phase);
-            }
-            
-            // 詳細診断モードの場合、成功率情報を更新
-            if (currentMode === 'detailed' && data.success_probability !== undefined) {
-                updateSuccessProbability(data.success_probability, data.success_delta, data.analysis_reason, {
-                    currentStage: data.current_spin_stage,
-                    messageSpinType: data.message_spin_type,
-                    stepAppropriateness: data.step_appropriateness,
-                    stageEvaluation: data.stage_evaluation,
-                    sessionStage: data.session_spin_stage,
-                    systemNotes: data.system_notes
-                });
-                
-                // ログに記録
-                if (window.logger) {
-                    window.logger.info('成功率更新', {
-                        success_probability: data.success_probability,
-                        success_delta: data.success_delta,
-                        analysis_reason: data.analysis_reason,
-                        current_spin_stage: data.current_spin_stage,
-                        message_spin_type: data.message_spin_type,
-                        step_appropriateness: data.step_appropriateness,
-                        stage_evaluation: data.stage_evaluation,
-                        session_spin_stage: data.session_spin_stage,
-                        conversation_phase: data.conversation_phase
-                    });
-                }
-            }
-        } else {
-            // 有償プランへの誘導が必要な場合
-            if (data.upgrade_required) {
-                const upgradeMessage = data.error || data.message || '有償プランであればさらにご利用頂けます';
-                const landingUrl = data.landing_page_url || '/landing.html';
-                showChatUpgradeMessage(upgradeMessage, landingUrl);
-            } else {
-                showChatError('メッセージ送信に失敗しました: ' + (data.message || data.error));
             }
         }
+        
     } catch (error) {
+        console.error('メッセージ送信エラー:', error);
+        customerMessageContent.textContent = 'エラーが発生しました: ' + error.message;
+        if (window.logger) {
+            window.logger.error('メッセージ送信エラー', { error });
+        }
         showChatError('エラー: ' + error.message);
     }
 }

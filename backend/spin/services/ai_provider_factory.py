@@ -69,6 +69,35 @@ class BaseAIClient(ABC):
             Dict: {'success': bool, 'message': str, 'model': str (optional)}
         """
         pass
+    
+    def chat_completion_stream(
+        self,
+        model: AIModel,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        **kwargs
+    ):
+        """
+        チャット補完（ストリーミング版）
+        
+        Yields:
+            str: 応答テキストのチャンク
+        
+        Note:
+            デフォルト実装では非ストリーミング版を呼び出して文字ごとに yield します。
+            サブクラスでオーバーライドしてストリーミング対応を実装してください。
+        """
+        # デフォルト実装：非ストリーミング版を使用して文字ごとに yield
+        content, _ = self.chat_completion(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **kwargs
+        )
+        for char in content:
+            yield char
 
 
 class OpenAIClient(BaseAIClient):
@@ -138,6 +167,41 @@ class OpenAIClient(BaseAIClient):
                 'success': False,
                 'message': f'接続失敗: {str(e)}'
             }
+    
+    def chat_completion_stream(
+        self,
+        model: AIModel,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        **kwargs
+    ):
+        """OpenAI チャット補完（ストリーミング版）"""
+        try:
+            if max_tokens is None:
+                context_window = model.context_window or 8192
+                max_tokens = min(model.max_output_tokens or 2000, int(context_window * 0.25))
+            
+            # ストリーミング有効でAPIを呼び出し
+            stream = self.client.chat.completions.create(
+                model=model.model_id,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=True,  # ストリーミングを有効化
+                **kwargs
+            )
+            
+            # チャンクを順次 yield
+            for chunk in stream:
+                if chunk.choices and len(chunk.choices) > 0:
+                    delta = chunk.choices[0].delta
+                    if delta and delta.content is not None:
+                        yield delta.content
+        
+        except Exception as e:
+            logger.error(f"OpenAI streaming error: {e}")
+            raise
 
 
 class AnthropicClient(BaseAIClient):

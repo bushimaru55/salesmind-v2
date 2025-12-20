@@ -875,27 +875,16 @@ class ModelConfigurationAdmin(admin.ModelAdmin):
         
         extra_context = extra_context or {}
         
-        # タイトルとサブタイトル
+        # タイトル
         extra_context['title'] = '用途別モデル設定'
-        extra_context['subtitle'] = mark_safe(
-            '<div style="background: #e7f3ff; padding: 15px; border-left: 4px solid #2196F3; margin-bottom: 20px;">'
-            '<strong>💡 設定の流れ:</strong><br>'
-            '<ol style="margin: 10px 0 0 20px; padding: 0;">'
-            '<li><strong>1️⃣ <a href="/admin/spin/aiproviderkey/" style="color: #2196F3;">API統合管理</a></strong> - プロバイダーのAPIキーを登録（1つのキーで全モデル使用可能）</li>'
-            '<li><strong>2️⃣ <a href="/admin/spin/aimodel/" style="color: #2196F3;">AIモデル</a></strong> - 利用可能なモデルの詳細情報を確認（コスト・性能・推奨用途）</li>'
-            '<li><strong>3️⃣ このページ</strong> - 各用途に「APIキー + モデル」を設定して実際に使用</li>'
-            '</ol>'
-            '</div>'
-        )
         
-        # 全ての用途の設定が存在するか確認
+        # 全ての用途の設定が存在するか確認（初期化ボタンは不要になったため削除）
         all_purposes = [choice[0] for choice in ModelConfiguration.PURPOSE_CHOICES]
         existing_purposes = set(ModelConfiguration.objects.values_list('purpose', flat=True))
         missing_purposes = set(all_purposes) - existing_purposes
         
         if missing_purposes:
             extra_context['missing_purposes'] = missing_purposes
-            extra_context['show_init_button'] = True
         
         # 推奨モデル情報を取得
         from spin.models import AIModel
@@ -929,11 +918,6 @@ class ModelConfigurationAdmin(admin.ModelAdmin):
                 name='spin_modelconfiguration_apply_recommended',
             ),
             path(
-                'initialize/',
-                self.admin_site.admin_view(self.initialize_view),
-                name='spin_modelconfiguration_initialize',
-            ),
-            path(
                 'get-models-for-provider/',
                 self.admin_site.admin_view(self.get_models_for_provider_view),
                 name='spin_modelconfiguration_get_models_for_provider',
@@ -942,17 +926,145 @@ class ModelConfigurationAdmin(admin.ModelAdmin):
         return custom_urls + urls
     
     def apply_recommended_view(self, request):
-        """推奨設定適用のビュー"""
-        if request.method == 'POST':
-            # 推奨設定を適用（新しい構造では手動設定が必要）
-            messages.info(request, 'ℹ️ 新しいマルチプロバイダー構造では、各用途のプライマリモデルを手動で設定してください。')
-        return redirect('admin:spin_modelconfiguration_changelist')
-    
-    def initialize_view(self, request):
-        """初期化のビュー"""
-        if request.method == 'POST':
-            # 初期化（新しい構造では手動設定が必要）
-            messages.info(request, 'ℹ️ 新しいマルチプロバイダー構造では、各用途のプライマリモデルを手動で設定してください。')
+        """推奨設定適用のビュー - APIキーが登録されており利用可能なモデルから自動適用"""
+        if request.method != 'POST':
+            return redirect('admin:spin_modelconfiguration_changelist')
+        
+        from django.db import transaction
+        from django.utils.safestring import mark_safe
+        
+        try:
+            applied_count = 0
+            skipped_count = 0
+            errors = []
+            applied_details = []
+            
+            with transaction.atomic():
+                # まず、全ての用途に推奨されているモデルを検索（優先度：最高）
+                universal_model = AIModel.objects.filter(
+                    recommended_for_generation=True,
+                    recommended_for_chat=True,
+                    recommended_for_scoring=True,
+                    recommended_for_analysis=True,
+                    is_active=True
+                ).first()
+                
+                universal_provider_key = None
+                if universal_model:
+                    # 全用途対応モデルに対応するAPIキーを取得
+                    universal_provider_key = AIProviderKey.objects.filter(
+                        provider=universal_model.provider,
+                        is_active=True
+                    ).order_by('-is_default', '-created_at').first()
+                
+                # 全用途対応モデルとAPIキーが存在する場合、全ての用途に適用
+                if universal_model and universal_provider_key:
+                    for purpose_code, purpose_name in ModelConfiguration.PURPOSE_CHOICES:
+                        try:
+                            config = ModelConfiguration.objects.get(purpose=purpose_code)
+                            config.primary_provider_key = universal_provider_key
+                            config.primary_model = universal_model
+                            config.is_active = True
+                            config.save(update_fields=['primary_provider_key', 'primary_model', 'is_active', 'updated_at'])
+                            action = '更新'
+                        except ModelConfiguration.DoesNotExist:
+                            config = ModelConfiguration.objects.create(
+                                purpose=purpose_code,
+                                primary_provider_key=universal_provider_key,
+                                primary_model=universal_model,
+                                is_active=True,
+                            )
+                            action = '作成'
+                        
+                        applied_count += 1
+                        applied_details.append(f"{purpose_name}: {universal_model.display_name} ({action})")
+                else:
+                    # 全用途対応モデルがない場合、各用途ごとに個別に推奨モデルを検索
+                    for purpose_code, purpose_name in ModelConfiguration.PURPOSE_CHOICES:
+                        # 推奨フラグが立っているモデルを取得
+                        recommended_model = None
+                        if purpose_code == 'spin_generation':
+                            recommended_model = AIModel.objects.filter(
+                                recommended_for_generation=True,
+                                is_active=True
+                            ).first()
+                        elif purpose_code == 'chat':
+                            recommended_model = AIModel.objects.filter(
+                                recommended_for_chat=True,
+                                is_active=True
+                            ).first()
+                        elif purpose_code == 'scoring':
+                            recommended_model = AIModel.objects.filter(
+                                recommended_for_scoring=True,
+                                is_active=True
+                            ).first()
+                        elif purpose_code == 'scraping_analysis':
+                            recommended_model = AIModel.objects.filter(
+                                recommended_for_analysis=True,
+                                is_active=True
+                            ).first()
+                        
+                        if not recommended_model:
+                            skipped_count += 1
+                            errors.append(f"{purpose_name}: 推奨モデルが見つかりません")
+                            continue
+                        
+                        # そのモデルに対応するAPIキーを取得（is_active=True、is_default優先）
+                        provider_key = AIProviderKey.objects.filter(
+                            provider=recommended_model.provider,
+                            is_active=True
+                        ).order_by('-is_default', '-created_at').first()
+                        
+                        if not provider_key:
+                            skipped_count += 1
+                            errors.append(f"{purpose_name}: {recommended_model.display_name}に対応するAPIキーが登録されていません")
+                            continue
+                        
+                        # ModelConfigurationを作成または更新
+                        try:
+                            config = ModelConfiguration.objects.get(purpose=purpose_code)
+                            # 既存の設定を更新
+                            config.primary_provider_key = provider_key
+                            config.primary_model = recommended_model
+                            config.is_active = True
+                            config.save(update_fields=['primary_provider_key', 'primary_model', 'is_active', 'updated_at'])
+                            action = '更新'
+                        except ModelConfiguration.DoesNotExist:
+                            # 新規作成
+                            config = ModelConfiguration.objects.create(
+                                purpose=purpose_code,
+                                primary_provider_key=provider_key,
+                                primary_model=recommended_model,
+                                is_active=True,
+                            )
+                            action = '作成'
+                        
+                        applied_count += 1
+                        applied_details.append(f"{purpose_name}: {recommended_model.display_name} ({action})")
+            
+            # 結果メッセージを表示
+            if applied_count > 0:
+                detail_message = '<br>'.join(applied_details)
+                messages.success(
+                    request,
+                    mark_safe(f'✅ {applied_count}件の推奨設定を適用しました。<br>{detail_message}')
+                )
+            if skipped_count > 0:
+                messages.warning(
+                    request,
+                    f'⚠️ {skipped_count}件の設定はスキップされました（APIキー未登録または推奨モデル未設定）。'
+                )
+            if errors:
+                for error in errors:
+                    messages.warning(request, f'⚠️ {error}')
+            
+        except Exception as e:
+            logger.error(f"Error applying recommended settings: {e}", exc_info=True)
+            messages.error(
+                request,
+                f'❌ 推奨設定の適用中にエラーが発生しました: {str(e)}'
+            )
+        
         return redirect('admin:spin_modelconfiguration_changelist')
     
     def get_models_for_provider_view(self, request):
@@ -1268,22 +1380,8 @@ class AIModelAdmin(admin.ModelAdmin):
         }
     
     def changelist_view(self, request, extra_context=None):
-        from django.utils.safestring import mark_safe
-        
         extra_context = extra_context or {}
         extra_context['title'] = 'AIモデル一覧（マスターデータ）'
-        extra_context['subtitle'] = mark_safe(
-            '<div style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin-bottom: 20px;">'
-            '<strong>ℹ️ このページについて</strong><br>'
-            '<p style="margin: 10px 0;">各AIモデルの詳細情報（コスト、性能、推奨用途）を管理します。</p>'
-            '<p style="margin: 10px 0;"><strong>重要:</strong></p>'
-            '<ul style="margin: 10px 0 0 20px; padding: 0;">'
-            '<li><strong>IS ACTIVE（有効）:</strong> システムで選択可能かどうか（マスターデータの状態）</li>'
-            '<li><strong>APIキー:</strong> 実際に使用できるかどうか（<a href="/admin/spin/aiproviderkey/" style="color: #856404;">API統合管理</a>でキーを登録）</li>'
-            '<li><strong>運用設定:</strong> 実際の使用は<a href="/admin/spin/modelconfiguration/" style="color: #856404;">用途別モデル設定</a>で行います</li>'
-            '</ul>'
-            '</div>'
-        )
         return super().changelist_view(request, extra_context)
     
     # 詳細ページのフィールドセット

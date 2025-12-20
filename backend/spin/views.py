@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.authentication import SessionAuthentication
 from django.shortcuts import get_object_or_404
+from django.http import StreamingHttpResponse
 from django.utils import timezone
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
@@ -677,6 +678,387 @@ def chat_session(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def chat_session_stream(request):
+    """商談セッション中にAI顧客と対話するエンドポイント（ストリーミング版）"""
+    session_id = request.data.get('session_id')
+    message = request.data.get('message')
+    
+    # バリデーション
+    errors = {}
+    if not session_id:
+        errors['session_id'] = ["このフィールドは必須です"]
+    elif session_id and not isinstance(session_id, str) and not isinstance(session_id, uuid.UUID):
+        try:
+            uuid.UUID(str(session_id))
+        except ValueError:
+            errors['session_id'] = ["有効なUUID形式で入力してください"]
+    
+    if not message:
+        errors['message'] = ["このフィールドは必須です"]
+    elif message and len(message.strip()) < 1:
+        errors['message'] = ["メッセージは1文字以上で入力してください"]
+    elif message and len(message.strip()) > 1000:
+        errors['message'] = ["メッセージは1000文字以内で入力してください"]
+    
+    if errors:
+        return Response({
+            "error": "Validation failed",
+            "details": errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        session = Session.objects.get(id=session_id, user=request.user)
+    except Session.DoesNotExist:
+        logger.warning(f"Session not found: {session_id}, user: {request.user.id}")
+        return Response({
+            "error": "セッションが見つかりません",
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    if session.status != 'active':
+        return Response({
+            "error": "セッションは既に終了しています",
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # 無限ループ防止
+    last_message = session.messages.filter(role='salesperson').order_by('-sequence').first()
+    if last_message and last_message.message.strip() == message.strip():
+        return Response({
+            "error": "Validation failed",
+            "details": {
+                "message": ["同じメッセージを連続して送信することはできません"]
+            }
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # 営業担当者のメッセージを保存
+    messages = session.messages.all()
+    sequence = messages.count() + 1
+    
+    salesperson_msg = ChatMessage.objects.create(
+        session=session,
+        role='salesperson',
+        message=message,
+        sequence=sequence
+    )
+    
+    conversation_history = list(messages) + [salesperson_msg]
+    
+    def generate():
+        """SSEストリームを生成"""
+        try:
+            full_response = ""
+            
+            # ストリーミングで応答を生成
+            from .services.openai_client import generate_customer_response_stream
+            for chunk in generate_customer_response_stream(session, conversation_history):
+                full_response += chunk
+                # SSE形式で送信
+                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk}, ensure_ascii=False)}\n\n"
+            
+            # ストリーミング完了後、応答を保存して後続処理を実行
+            # 既存のchat_sessionと同じ処理を実行
+            try:
+                # クロージングスタイルを判定
+                closing_style = None
+                message_lower = message.lower()
+                option_keywords = ['どちら', 'どっち', 'どれ', 'どちらで', 'どちらが', 'どちらを']
+                if any(keyword in message_lower for keyword in option_keywords):
+                    closing_style = "option_based"
+                elif any(keyword in message_lower for keyword in ['ぜひ', '必ず', '絶対', '今すぐ', 'すぐに']):
+                    closing_style = "one_shot_push"
+                
+                # 温度スコアを計算（初期値）
+                temperature_result = calculate_temperature_score(
+                    full_response, 
+                    use_llm=True,
+                    spin_penalty=0.0,
+                    closing_style=closing_style
+                )
+                
+                # AI顧客のメッセージを保存
+                customer_msg = ChatMessage.objects.create(
+                    session=session,
+                    role='customer',
+                    message=full_response,
+                    sequence=sequence + 1,
+                    temperature_score=temperature_result.get('temperature'),
+                    temperature_details={
+                        'sentiment': temperature_result.get('sentiment'),
+                        'sentiment_score': temperature_result.get('sentiment_score'),
+                        'buying_signal': temperature_result.get('buying_signal'),
+                        'cognitive_load': temperature_result.get('cognitive_load'),
+                        'engagement': temperature_result.get('engagement'),
+                        'question_score': temperature_result.get('question_score'),
+                    }
+                )
+                
+                # 詳細診断モードかつ企業情報がある場合、成功率を分析・更新
+                success_probability = session.success_probability
+                success_delta = 0
+                analysis_reason = None
+                current_spin_stage = None
+                message_spin_type = None
+                step_appropriateness = None
+                stage_evaluation = 'unknown'
+                system_notes = None
+                stage_labels = {
+                    'S': '状況確認',
+                    'P': '課題顕在化',
+                    'I': '示唆',
+                    'N': '解決メリット',
+                }
+                stage_order = {'S': 0, 'P': 1, 'I': 2, 'N': 3}
+                current_stage_value = session.current_spin_stage or 'S'
+                
+                if session.mode == 'detailed' and session.company:
+                    try:
+                        # 営業メッセージを分析
+                        analysis_result = analyze_sales_message(session, conversation_history, message)
+                        success_delta = analysis_result.get('success_delta', 0)
+                        analysis_reason = analysis_result.get('reason', '')
+                        current_spin_stage = analysis_result.get('current_spin_stage')
+                        message_spin_type = analysis_result.get('message_spin_type')
+                        step_appropriateness = analysis_result.get('step_appropriateness')
+                        
+                        # SPIN順序ペナルティの緩和ロジック
+                        adjusted_delta = success_delta
+                        spin_order_penalty = 0.0
+                        
+                        if message_spin_type in stage_order:
+                            diff = stage_order[message_spin_type] - stage_order.get(current_stage_value, 0)
+                            if diff == 0:
+                                stage_evaluation = 'repeat'
+                                adjusted_delta = max(min(success_delta, 1), -1)
+                            elif diff == 1:
+                                stage_evaluation = 'advance'
+                                adjusted_delta = max(success_delta, 2)
+                            elif diff > 1:
+                                stage_evaluation = 'jump'
+                                original_penalty = min(success_delta, -3)
+                                spin_order_penalty = original_penalty * 0.3
+                                adjusted_delta = spin_order_penalty
+                            elif diff < 0:
+                                stage_evaluation = 'regression'
+                                original_penalty = min(success_delta, -2)
+                                spin_order_penalty = original_penalty * 0.3
+                                adjusted_delta = spin_order_penalty
+                        else:
+                            stage_evaluation = 'unknown'
+                            adjusted_delta = min(success_delta, 0)
+                        
+                        # 顧客の前向き反応があれば、順序ペナルティをさらに軽減（50%）
+                        customer_response_lower = full_response.lower()
+                        positive_keywords = ['興味', '詳しく', 'デモ', '体験', '導入', '価値', '検討', 'メリット']
+                        has_positive_response = any(keyword in customer_response_lower for keyword in positive_keywords)
+                        
+                        if has_positive_response and spin_order_penalty < 0:
+                            spin_order_penalty = spin_order_penalty * 0.5
+                            adjusted_delta = spin_order_penalty
+
+                        adjusted_delta = max(-5, min(5, adjusted_delta))
+                        success_delta = adjusted_delta
+                        
+                        if message_spin_type in stage_order:
+                            stage_name = stage_labels.get(message_spin_type, message_spin_type)
+                        else:
+                            stage_name = '判定不能'
+                        eval_map = {
+                            'advance': '段階が前進しました',
+                            'repeat': '同じ段階での深掘りです',
+                            'jump': '段階を飛び越えています',
+                            'regression': '段階が逆戻りしています',
+                            'unknown': '段階を判定できません',
+                        }
+                        system_notes = eval_map.get(stage_evaluation, '')
+                        if analysis_reason:
+                            analysis_reason = f"{analysis_reason} / システム判定: {stage_name}・{system_notes}"
+                        else:
+                            analysis_reason = f"システム判定: {stage_name}・{system_notes}"
+                        
+                        # 成功率を更新（0-100の範囲でクリップ）
+                        new_probability = session.success_probability + success_delta
+                        success_probability = max(0, min(100, new_probability))
+                        
+                        # セッションの成功率を更新
+                        session.success_probability = success_probability
+                        session.last_analysis_reason = analysis_reason
+                        
+                        # SPIN段階の更新とconversation_phaseの更新
+                        if message_spin_type in stage_order:
+                            if stage_evaluation in ['advance', 'repeat']:
+                                session.current_spin_stage = message_spin_type
+                                phase_map = {
+                                    'S': 'SPIN_S',
+                                    'P': 'SPIN_P',
+                                    'I': 'SPIN_I',
+                                    'N': 'SPIN_N'
+                                }
+                                if message_spin_type in phase_map:
+                                    session.conversation_phase = phase_map[message_spin_type]
+                        
+                        # 失注候補をチェック
+                        updated_history = list(session.messages.all().order_by('sequence')) + [salesperson_msg]
+                        loss_reason = check_loss_candidate(session, updated_history)
+                        
+                        if loss_reason:
+                            if session.conversation_phase != 'LOSS_CANDIDATE':
+                                session.conversation_phase = 'LOSS_CANDIDATE'
+                                session.loss_reason = loss_reason
+                                logger.info(f"失注候補に遷移: Session {session.id}, reason={loss_reason}")
+                        elif should_trigger_closing(session, updated_history):
+                            session.conversation_phase = 'CLOSING_READY'
+                            logger.info(f"クロージング準備完了: Session {session.id}")
+                        
+                        session.save()
+                        
+                        # 営業メッセージに分析結果を保存
+                        salesperson_msg.success_delta = success_delta
+                        summary_lines = []
+                        if analysis_reason:
+                            summary_lines.append(analysis_reason)
+                        if step_appropriateness:
+                            summary_lines.append(f"ステップ適切性: {step_appropriateness}")
+                        if message_spin_type:
+                            summary_lines.append(f"今回の発言: {message_spin_type}")
+                        if stage_evaluation:
+                            summary_lines.append(f"段階評価: {stage_evaluation}")
+                        salesperson_msg.analysis_summary = "\n".join(summary_lines) if summary_lines else None
+                        salesperson_msg.spin_stage = message_spin_type if message_spin_type in stage_order else None
+                        salesperson_msg.stage_evaluation = stage_evaluation
+                        salesperson_msg.system_notes = system_notes
+                        salesperson_msg.save()
+                        
+                        # 温度スコアを再計算（SPIN順序ペナルティを含める）
+                        spin_penalty_for_temp = 0.0
+                        if stage_evaluation in ['jump', 'regression']:
+                            if stage_evaluation == 'jump':
+                                original_penalty = -3.0
+                            else:
+                                original_penalty = -2.0
+                            spin_penalty_for_temp = original_penalty * 0.3
+                            
+                            customer_response_lower = full_response.lower()
+                            positive_keywords = ['興味', '詳しく', 'デモ', '体験', '導入', '価値', '検討', 'メリット']
+                            has_positive_response = any(keyword in customer_response_lower for keyword in positive_keywords)
+                            if has_positive_response:
+                                spin_penalty_for_temp = spin_penalty_for_temp * 0.5
+                        
+                        # 温度スコアを再計算
+                        temperature_result = calculate_temperature_score(
+                            full_response,
+                            use_llm=True,
+                            spin_penalty=spin_penalty_for_temp,
+                            closing_style=closing_style
+                        )
+                        
+                        # 温度スコアを更新
+                        customer_msg.temperature_score = temperature_result.get('temperature')
+                        customer_msg.temperature_details = {
+                            'sentiment': temperature_result.get('sentiment'),
+                            'sentiment_score': temperature_result.get('sentiment_score'),
+                            'buying_signal': temperature_result.get('buying_signal'),
+                            'cognitive_load': temperature_result.get('cognitive_load'),
+                            'engagement': temperature_result.get('engagement'),
+                            'question_score': temperature_result.get('question_score'),
+                            'positive_response': temperature_result.get('positive_response'),
+                            'spin_penalty': temperature_result.get('spin_penalty'),
+                            'closing_bonus': temperature_result.get('closing_bonus'),
+                        }
+                        customer_msg.save()
+                        
+                    except Exception as e:
+                        logger.warning(f"成功率分析に失敗しました: {e}", exc_info=True)
+                        success_probability = session.success_probability
+                
+                # 失注確定のチェック
+                loss_response = None
+                updated_history_for_loss = list(session.messages.all().order_by('sequence'))
+                if session.conversation_phase == 'LOSS_CANDIDATE':
+                    loss_reason = session.loss_reason or 'NO_URGENCY'
+                    if check_loss_confirmed(session, updated_history_for_loss, loss_reason):
+                        session.conversation_phase = 'LOSS_CONFIRMED'
+                        session.save()
+                        loss_response = generate_loss_response(loss_reason)
+                        logger.info(f"失注確定: Session {session.id}, reason={loss_reason}")
+                
+                # クロージング提案の生成
+                closing_proposal = None
+                if session.conversation_phase == 'CLOSING_READY' and not loss_response:
+                    try:
+                        updated_history = list(session.messages.all().order_by('sequence'))
+                        closing_proposal = generate_closing_proposal(session, updated_history)
+                        logger.info(f"クロージング提案を生成: Session {session.id}, type={closing_proposal.get('action_type')}")
+                    except Exception as e:
+                        logger.warning(f"クロージング提案生成に失敗: {e}", exc_info=True)
+                
+                # 温度スコア履歴を取得
+                all_messages = list(session.messages.all().order_by('sequence'))
+                temperature_history = []
+                for msg in all_messages:
+                    if msg.role == 'customer' and msg.temperature_score is not None:
+                        temperature_history.append({
+                            "sequence": msg.sequence,
+                            "temperature": msg.temperature_score,
+                            "created_at": msg.created_at.isoformat()
+                        })
+                
+                # 完了メッセージにメタデータを含めて送信
+                done_data = {
+                    'type': 'done',
+                    'full_response': full_response,
+                    'message_id': str(customer_msg.id),
+                    'current_temperature': customer_msg.temperature_score,
+                    'temperature_details': customer_msg.temperature_details or {},
+                    'temperature_history': temperature_history,
+                    'conversation_phase': session.conversation_phase,
+                }
+                
+                # 詳細診断モードの場合、成功率情報を追加
+                if session.mode == 'detailed':
+                    done_data['success_probability'] = success_probability
+                    done_data['success_delta'] = success_delta
+                    done_data['current_spin_stage'] = current_spin_stage
+                    done_data['message_spin_type'] = message_spin_type
+                    done_data['step_appropriateness'] = step_appropriateness
+                    done_data['stage_evaluation'] = stage_evaluation
+                    if analysis_reason:
+                        done_data['analysis_reason'] = analysis_reason
+                    if system_notes:
+                        done_data['system_notes'] = system_notes
+                    done_data['session_spin_stage'] = session.current_spin_stage
+                
+                # 失注確定の場合
+                if loss_response:
+                    done_data['loss_response'] = loss_response
+                    done_data['should_end_session'] = True
+                
+                # クロージング提案がある場合
+                if closing_proposal:
+                    done_data['closing_proposal'] = closing_proposal
+                
+                yield f"data: {json.dumps(done_data, ensure_ascii=False)}\n\n"
+                
+            except Exception as save_error:
+                logger.error(f"ストリーミング後の保存処理エラー: {save_error}", exc_info=True)
+                # 保存に失敗しても完了メッセージは送信
+                yield f"data: {json.dumps({'type': 'done', 'full_response': full_response, 'error': '保存処理でエラーが発生しました'}, ensure_ascii=False)}\n\n"
+            
+        except ValueError as ve:
+            error_message = str(ve)
+            logger.error(f"ストリーミングエラー（ValueError）: {error_message}", exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'error': error_message}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            error_message = str(e)
+            logger.error(f"ストリーミングエラー: {error_message}", exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'error': error_message}, ensure_ascii=False)}\n\n"
+    
+    response = StreamingHttpResponse(generate(), content_type='text/event-stream')
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'  # nginxのバッファリングを無効化
+    return response
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def finish_session(request):
     """セッションを終了し、スコアリングを実行するエンドポイント"""
     session_id = request.data.get('session_id')
@@ -1236,6 +1618,7 @@ def transcribe_speech(request):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         audio_file = request.FILES['audio']
+        logger.info(f"音声ファイルを受信: filename={audio_file.name}, size={audio_file.size} bytes, content_type={audio_file.content_type}")
         
         # ファイルサイズチェック（10MB制限）
         max_size = 10 * 1024 * 1024  # 10MB
@@ -1245,14 +1628,37 @@ def transcribe_speech(request):
                 "detail": f"ファイルサイズは{max_size / 1024 / 1024}MB以下にしてください"
             }, status=status.HTTP_400_BAD_REQUEST)
         
+        # 最小サイズチェック（空ファイルや極小ファイルの検出）
+        min_size = 100  # 100バイト
+        if audio_file.size < min_size:
+            return Response({
+                "error": "音声ファイルが小さすぎます",
+                "detail": f"音声ファイルが正しく録音されていない可能性があります（サイズ: {audio_file.size} bytes）"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         # 言語コードを取得（デフォルト: ja-JP）
         language_code = request.data.get('language_code', 'ja-JP')
         
         # 音声データを読み込む
         audio_data = audio_file.read()
+        logger.info(f"音声データを読み込み: size={len(audio_data)} bytes")
         
         # エンコーディングを検出
-        encoding = detect_audio_encoding(audio_data)
+        try:
+            encoding = detect_audio_encoding(audio_data)
+            logger.info(f"音声エンコーディングを検出: {encoding}")
+        except ValueError as ve:
+            logger.error(f"音声エンコーディング検出エラー: {str(ve)}")
+            return Response({
+                "error": "音声形式の検出に失敗しました",
+                "detail": str(ve)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"音声エンコーディング検出エラー（予期しないエラー）: {str(e)}", exc_info=True)
+            return Response({
+                "error": "音声形式の検出に失敗しました",
+                "detail": f"予期しないエラーが発生しました: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         # WEBM OPUS形式の場合は、WAV形式に変換してから送信
         # GCP Speech-to-Text APIのWEBM OPUSサポートが不安定な場合があるため
@@ -1264,17 +1670,33 @@ def transcribe_speech(request):
                 audio_data, sample_rate_hertz = convert_webm_to_wav(audio_data)
                 encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
                 logger.info(f'WAV形式への変換が完了しました。サンプリングレート: {sample_rate_hertz}Hz')
+            except ImportError as ie:
+                logger.error(f'pydubライブラリがインストールされていません: {str(ie)}')
+                return Response({
+                    "error": "音声変換ライブラリがインストールされていません",
+                    "detail": "pydubライブラリが必要です。管理者に連絡してください。"
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             except Exception as e:
-                logger.warning(f'WAV形式への変換に失敗しました。元の形式で続行します: {str(e)}')
-                # 変換に失敗した場合は、元の形式で続行
+                logger.error(f'WAV形式への変換に失敗しました: {str(e)}', exc_info=True)
+                return Response({
+                    "error": "音声形式の変換に失敗しました",
+                    "detail": f"WEBMからWAVへの変換に失敗しました: {str(e)}"
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         # 音声をテキストに変換
-        result = transcribe_audio(
-            audio_data=audio_data,
-            language_code=language_code,
-            encoding=encoding,
-            sample_rate_hertz=sample_rate_hertz
-        )
+        try:
+            result = transcribe_audio(
+                audio_data=audio_data,
+                language_code=language_code,
+                encoding=encoding,
+                sample_rate_hertz=sample_rate_hertz
+            )
+        except Exception as transcription_error:
+            logger.error(f"音声認識エラー: {str(transcription_error)}", exc_info=True)
+            return Response({
+                "error": "音声認識に失敗しました",
+                "detail": str(transcription_error)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         logger.info(f"音声変換成功: user={request.user.username}, text_length={len(result['text'])}")
         
@@ -1283,8 +1705,17 @@ def transcribe_speech(request):
             "confidence": result['confidence']
         }, status=status.HTTP_200_OK)
     
+    except ValueError as ve:
+        logger.error(f"音声変換エラー（値エラー）: {ve}", exc_info=True)
+        return Response({
+            "error": "リクエストの形式が正しくありません",
+            "detail": str(ve)
+        }, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        logger.error(f"音声変換エラー: {e}", exc_info=True)
+        logger.error(f"音声変換エラー（予期しないエラー）: {e}", exc_info=True)
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"エラートレースバック:\n{error_traceback}")
         return Response({
             "error": "音声変換に失敗しました",
             "detail": str(e)

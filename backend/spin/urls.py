@@ -19,6 +19,7 @@ urlpatterns = [
     path('session/list/', views.list_sessions, name='list_sessions'),
     path('session/<uuid:id>/', views.get_session, name='get_session'),
     path('session/chat/', views.chat_session, name='chat_session'),
+    path('session/chat/stream/', views.chat_session_stream, name='chat_session_stream'),
     path('session/finish/', views.finish_session, name='finish_session'),
 
     # レポート
