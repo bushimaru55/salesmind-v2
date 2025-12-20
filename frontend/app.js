@@ -1352,7 +1352,14 @@ async function sendChatMessage() {
                                 }
                             }
                         } else if (data.type === 'error') {
-                            throw new Error(data.error);
+                            // 有償プランへの誘導が必要な場合
+                            if (data.upgrade_required) {
+                                const upgradeMessage = data.error || '有償プランであればさらにご利用頂けます';
+                                const landingUrl = data.landing_page_url || '/landing.html';
+                                showChatUpgradeMessage(upgradeMessage, landingUrl);
+                            } else {
+                                throw new Error(data.error);
+                            }
                         }
                     } catch (e) {
                         console.error('ストリームデータのパースエラー:', e);

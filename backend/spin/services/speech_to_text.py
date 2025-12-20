@@ -68,7 +68,7 @@ def get_speech_client() -> Optional[speech.SpeechClient]:
 def transcribe_audio(
     audio_data: bytes,
     language_code: str = 'ja-JP',
-    sample_rate_hertz: int = 16000,
+    sample_rate_hertz: Optional[int] = 16000,
     encoding: speech.RecognitionConfig.AudioEncoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
 ) -> Dict[str, Any]:
     """
@@ -108,7 +108,7 @@ def transcribe_audio(
         # サンプリングレートの設定
         # WEBM OPUS形式の場合は、サンプリングレートを指定しない（自動検出）
         # その他の形式の場合は、明示的にサンプリングレートを指定
-        if encoding != speech.RecognitionConfig.AudioEncoding.WEBM_OPUS:
+        if encoding != speech.RecognitionConfig.AudioEncoding.WEBM_OPUS and sample_rate_hertz is not None:
             config_params['sample_rate_hertz'] = sample_rate_hertz
         
         # 拡張モデルの使用（日本語の場合）
@@ -202,7 +202,13 @@ def convert_webm_to_wav(audio_data: bytes) -> tuple[bytes, int]:
         
         try:
             # pydubでWEBMを読み込んでWAVに変換
-            audio = AudioSegment.from_file(webm_file_path, format="webm")
+            # formatを明示的に指定せず、pydubに自動検出させる
+            try:
+                audio = AudioSegment.from_file(webm_file_path, format="webm")
+            except Exception as format_error:
+                # webm形式での読み込みに失敗した場合、形式を指定せずに試行
+                logger.warning(f'WEBM形式での読み込みに失敗しました: {str(format_error)}。形式を自動検出します。')
+                audio = AudioSegment.from_file(webm_file_path)
             
             # サンプリングレートを取得（デフォルトは16000Hz）
             sample_rate = audio.frame_rate
@@ -245,32 +251,71 @@ def convert_webm_to_wav(audio_data: bytes) -> tuple[bytes, int]:
             
             # WAV形式にエクスポート（16kHz、モノラル、16bit）
             wav_file_path = webm_file_path.replace('.webm', '.wav')
-            audio.export(
-                wav_file_path,
-                format="wav",
-                parameters=["-ar", str(sample_rate), "-ac", "1", "-sample_fmt", "s16"]
-            )
             
-            # WAVデータを読み込む
-            with open(wav_file_path, 'rb') as wav_file:
-                wav_data = wav_file.read()
-            
-            # 一時ファイルを削除
-            os.unlink(webm_file_path)
-            os.unlink(wav_file_path)
-            
-            logger.info(f'WEBMからWAVへの変換成功: {len(audio_data)} bytes -> {len(wav_data)} bytes, サンプリングレート: {sample_rate}Hz')
-            return wav_data, sample_rate
+            try:
+                # まず、パラメータなしで試行（pydubが自動的に最適な設定を選択）
+                audio.export(
+                    wav_file_path,
+                    format="wav"
+                )
+                
+                # エクスポートされたファイルが存在し、サイズが0より大きいことを確認
+                if not os.path.exists(wav_file_path) or os.path.getsize(wav_file_path) == 0:
+                    raise Exception('WAVファイルのエクスポートに失敗しました（ファイルサイズが0）')
+                
+                # WAVデータを読み込む
+                with open(wav_file_path, 'rb') as wav_file:
+                    wav_data = wav_file.read()
+                
+                if len(wav_data) == 0:
+                    raise Exception('WAVファイルが空です')
+                
+                # 一時ファイルを削除
+                try:
+                    os.unlink(webm_file_path)
+                except Exception:
+                    pass  # 削除に失敗しても続行
+                
+                try:
+                    os.unlink(wav_file_path)
+                except Exception:
+                    pass  # 削除に失敗しても続行
+                
+                logger.info(f'WEBMからWAVへの変換成功: {len(audio_data)} bytes -> {len(wav_data)} bytes, サンプリングレート: {sample_rate}Hz')
+                return wav_data, sample_rate
+                
+            except Exception as export_error:
+                # エクスポートに失敗した場合、一時ファイルをクリーンアップ
+                if os.path.exists(wav_file_path):
+                    try:
+                        os.unlink(wav_file_path)
+                    except Exception:
+                        pass
+                raise Exception(f'WAV形式へのエクスポートに失敗しました: {str(export_error)}')
         
         except Exception as e:
             # エラー時も一時ファイルを削除
-            if os.path.exists(webm_file_path):
-                os.unlink(webm_file_path)
+            try:
+                if os.path.exists(webm_file_path):
+                    os.unlink(webm_file_path)
+                # WAVファイルも存在する場合は削除
+                wav_file_path = webm_file_path.replace('.webm', '.wav')
+                if os.path.exists(wav_file_path):
+                    os.unlink(wav_file_path)
+            except Exception as cleanup_error:
+                logger.warning(f'一時ファイルの削除に失敗しました: {str(cleanup_error)}')
             raise e
     
     except Exception as e:
-        logger.error(f'WEBMからWAVへの変換エラー: {str(e)}')
-        raise Exception(f'音声形式の変換に失敗しました: {str(e)}')
+        error_detail = str(e)
+        logger.error(f'WEBMからWAVへの変換エラー: {error_detail}', exc_info=True)
+        # より詳細なエラーメッセージを提供
+        if 'ffmpeg' in error_detail.lower() or 'avconv' in error_detail.lower():
+            raise Exception(f'音声形式の変換に失敗しました: ffmpegが正しくインストールされていない可能性があります。詳細: {error_detail}')
+        elif 'pydub' in error_detail.lower():
+            raise Exception(f'音声形式の変換に失敗しました: pydubライブラリの問題が発生しました。詳細: {error_detail}')
+        else:
+            raise Exception(f'音声形式の変換に失敗しました: {error_detail}')
 
 
 def detect_audio_encoding(audio_data: bytes) -> speech.RecognitionConfig.AudioEncoding:

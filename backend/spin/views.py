@@ -1045,11 +1045,39 @@ def chat_session_stream(request):
         except ValueError as ve:
             error_message = str(ve)
             logger.error(f"ストリーミングエラー（ValueError）: {error_message}", exc_info=True)
-            yield f"data: {json.dumps({'type': 'error', 'error': error_message}, ensure_ascii=False)}\n\n"
+            
+            # 簡易診断モードの場合、有償プランへの誘導メッセージを返す
+            if session.mode == 'simple' and ('会話履歴が長すぎる' in error_message or 'コンテキスト' in error_message):
+                error_data = {
+                    'type': 'error',
+                    'error': '有償プランであればさらにご利用頂けます',
+                    'upgrade_required': True,
+                    'landing_page_url': '/landing.html'
+                }
+            else:
+                error_data = {
+                    'type': 'error',
+                    'error': error_message
+                }
+            yield f"data: {json.dumps(error_data, ensure_ascii=False)}\n\n"
         except Exception as e:
             error_message = str(e)
             logger.error(f"ストリーミングエラー: {error_message}", exc_info=True)
-            yield f"data: {json.dumps({'type': 'error', 'error': error_message}, ensure_ascii=False)}\n\n"
+            
+            # 簡易診断モードの場合、コンテキスト長超過エラーの可能性をチェック
+            if session.mode == 'simple' and ('context_length' in error_message.lower() or 'maximum context length' in error_message.lower() or 'token' in error_message.lower()):
+                error_data = {
+                    'type': 'error',
+                    'error': '有償プランであればさらにご利用頂けます',
+                    'upgrade_required': True,
+                    'landing_page_url': '/landing.html'
+                }
+            else:
+                error_data = {
+                    'type': 'error',
+                    'error': error_message
+                }
+            yield f"data: {json.dumps(error_data, ensure_ascii=False)}\n\n"
     
     response = StreamingHttpResponse(generate(), content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache'
@@ -1671,17 +1699,17 @@ def transcribe_speech(request):
                 encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
                 logger.info(f'WAV形式への変換が完了しました。サンプリングレート: {sample_rate_hertz}Hz')
             except ImportError as ie:
-                logger.error(f'pydubライブラリがインストールされていません: {str(ie)}')
-                return Response({
-                    "error": "音声変換ライブラリがインストールされていません",
-                    "detail": "pydubライブラリが必要です。管理者に連絡してください。"
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                logger.warning(f'pydubライブラリがインストールされていません: {str(ie)}。元のWEBM形式で続行します。')
+                # pydubがインストールされていない場合は、元のWEBM形式で続行
+                # GCP Speech-to-Text APIがWEBM OPUSをサポートしている可能性があるため
+                encoding = speech.RecognitionConfig.AudioEncoding.WEBM_OPUS
+                sample_rate_hertz = None  # WEBM OPUSの場合はサンプリングレートを指定しない
             except Exception as e:
-                logger.error(f'WAV形式への変換に失敗しました: {str(e)}', exc_info=True)
-                return Response({
-                    "error": "音声形式の変換に失敗しました",
-                    "detail": f"WEBMからWAVへの変換に失敗しました: {str(e)}"
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                logger.warning(f'WAV形式への変換に失敗しました: {str(e)}。元のWEBM形式で続行します。', exc_info=True)
+                # 変換に失敗した場合は、元のWEBM形式で続行を試みる
+                # GCP Speech-to-Text APIがWEBM OPUSをサポートしている可能性があるため
+                encoding = speech.RecognitionConfig.AudioEncoding.WEBM_OPUS
+                sample_rate_hertz = None  # WEBM OPUSの場合はサンプリングレートを指定しない
         
         # 音声をテキストに変換
         try:
