@@ -44,14 +44,17 @@ def get_speech_client() -> Optional[speech.SpeechClient]:
                     project_root = Path(settings.BASE_DIR).parent
                     credentials_path = str(project_root / credentials_path)
             
-            if os.path.exists(credentials_path):
+            if os.path.exists(credentials_path) and os.path.isfile(credentials_path):
                 # サービスアカウントキーから認証情報を読み込む
                 credentials = service_account.Credentials.from_service_account_file(
                     credentials_path
                 )
                 client = speech.SpeechClient(credentials=credentials)
             else:
-                logger.warning(f'GCP認証情報ファイルが見つかりません: {credentials_path}')
+                if os.path.exists(credentials_path) and os.path.isdir(credentials_path):
+                    logger.error(f'GCP認証情報パスはディレクトリです: {credentials_path}')
+                else:
+                    logger.warning(f'GCP認証情報ファイルが見つかりません: {credentials_path}')
                 # デフォルト認証を使用（GCP環境やgcloud認証済みの場合）
                 client = speech.SpeechClient()
         else:
@@ -250,13 +253,15 @@ def convert_webm_to_wav(audio_data: bytes) -> tuple[bytes, int]:
                     logger.warning(f'音声の音量が非常に小さいです: {max_dBFS:.1f}dBFS。マイクの音量設定を確認してください。')
             
             # WAV形式にエクスポート（16kHz、モノラル、16bit）
+            # GCP Speech-to-Text APIのLINEAR16エンコーディングは16ビットサンプルを要求するため、明示的に16ビットを指定
             wav_file_path = webm_file_path.replace('.webm', '.wav')
             
             try:
-                # まず、パラメータなしで試行（pydubが自動的に最適な設定を選択）
+                # 16ビットPCM形式でエクスポート（GCP Speech-to-Text APIのLINEAR16要件を満たすため）
                 audio.export(
                     wav_file_path,
-                    format="wav"
+                    format="wav",
+                    parameters=["-acodec", "pcm_s16le"]  # 16ビットリトルエンディアンPCM
                 )
                 
                 # エクスポートされたファイルが存在し、サイズが0より大きいことを確認

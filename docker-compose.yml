@@ -6,8 +6,8 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      # GCP認証情報ファイルをマウント
-      - ./backend/salesmind-481802-2edf66e5244d.json:/app/salesmind-481802-2edf66e5244d.json:ro
+      # GCP認証情報ファイル（./backend:/appでマウントされるため、個別マウントは不要）
+      # JSONファイルを backend/salesmind-481802-2edf66e5244d.json として配置してください
     env_file:
       - .env
     environment:
@@ -33,15 +33,30 @@ services:
     container_name: salesmind_frontend
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./frontend:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./backend/staticfiles:/static:ro
+      - certbot-etc:/etc/letsencrypt:ro
+      - certbot-var:/var/lib/letsencrypt:ro
     depends_on:
       - web
     networks:
       - salesmind_network
+  certbot:
+    image: certbot/certbot
+    container_name: salesmind_certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - ./frontend:/var/www/certbot:rw
+    networks:
+      - salesmind_network
 volumes:
   postgres_data:
+  certbot-etc:
+  certbot-var:
 
 networks:
   salesmind_network:

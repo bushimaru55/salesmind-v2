@@ -1,35 +1,12 @@
-# HTTP to HTTPS redirect
+# 初回証明書取得用のnginx設定（HTTPのみ）
 server {
     listen 80;
     server_name salesmind.mind-bridge.tech;
 
-    # Let's Encryptの認証用（証明書更新時に必要）
+    # Let's Encryptの認証用
     location /.well-known/acme-challenge/ {
         root /usr/share/nginx/html;
     }
-
-    # HTTPからHTTPSへリダイレクト
-    location / {
-        return 301 https://$host$request_uri;
-    }
-}
-
-# HTTPS server
-server {
-    listen 443 ssl;
-    http2 on;
-    server_name salesmind.mind-bridge.tech;
-
-    # SSL証明書のパス
-    ssl_certificate /etc/letsencrypt/live/salesmind.mind-bridge.tech/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/salesmind.mind-bridge.tech/privkey.pem;
-
-    # SSL設定
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 10m;
 
     # Django 静的ファイル
     location /static/ {
@@ -72,3 +49,4 @@ server {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
 }
+

@@ -129,6 +129,7 @@ else:
         "http://127.0.0.1:8080",
         "http://localhost:8000",
         "http://127.0.0.1:8000",
+        "https://salesmind.mind-bridge.tech",  # HTTPS環境用
     ]
 
 # REST Framework settings
