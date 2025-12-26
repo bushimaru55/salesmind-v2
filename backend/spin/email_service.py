@@ -128,9 +128,43 @@ def send_email_from_template(template_name, recipient_email, context, purpose='d
         return False
 
 
+def send_pending_registration_email(pending):
+    """
+    仮登録ユーザーへのメール認証用メールを送信
+    
+    Args:
+        pending: PendingUserRegistrationオブジェクト
+    """
+    try:
+        # 認証URLを生成
+        verification_url = f"{settings.SITE_URL}/api/auth/verify-email/?token={pending.token}"
+        
+        # テンプレート変数を準備
+        context = {
+            'username': pending.username,
+            'email': pending.email,
+            'verification_url': verification_url,
+            'site_name': 'SalesMind',
+            'site_url': settings.SITE_URL,
+        }
+        
+        # テンプレートからメール送信
+        return send_email_from_template(
+            template_name='registration_email',
+            recipient_email=pending.email,
+            context=context,
+            purpose='registration'
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to send verification email to {pending.email}: {e}", exc_info=True)
+        return False
+
+
 def send_verification_email(user, token):
     """
-    メール認証用のメールを送信（テンプレート使用版）
+    既存ユーザーへのメール認証用のメールを送信（テンプレート使用版）
+    ※この関数は既存ユーザー用。新規登録はsend_pending_registration_emailを使用
     
     Args:
         user: Userオブジェクト

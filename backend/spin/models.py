@@ -628,8 +628,41 @@ class UserProfile(models.Model):
         verbose_name_plural = "ユーザープロファイル"
 
 
+class PendingUserRegistration(models.Model):
+    """メール認証待ちのユーザー登録情報（一時保存）"""
+    # 基本情報
+    username = models.CharField(max_length=150, unique=True)
+    email = models.EmailField(unique=True)
+    password_hash = models.CharField(max_length=128, help_text="ハッシュ化されたパスワード")
+    
+    # 追加情報
+    industry = models.CharField(max_length=50, blank=True, null=True)
+    sales_experience = models.CharField(max_length=20, blank=True, null=True)
+    usage_purpose = models.CharField(max_length=50, blank=True, null=True)
+    
+    # 認証トークン
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(help_text="トークンの有効期限")
+    verified = models.BooleanField(default=False, help_text="メール認証完了フラグ")
+    verified_at = models.DateTimeField(null=True, blank=True, help_text="認証完了日時")
+    
+    def is_valid(self):
+        """トークンが有効かどうか"""
+        from django.utils import timezone
+        return not self.verified and timezone.now() < self.expires_at
+    
+    def __str__(self):
+        return f"{self.username} ({self.email}) - {'認証済み' if self.verified else '未認証'}"
+    
+    class Meta:
+        verbose_name = "仮登録ユーザー"
+        verbose_name_plural = "仮登録ユーザー"
+        ordering = ['-created_at']
+
+
 class EmailVerificationToken(models.Model):
-    """メール認証トークン"""
+    """メール認証トークン（既存ユーザー用）"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='email_verification_tokens')
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)

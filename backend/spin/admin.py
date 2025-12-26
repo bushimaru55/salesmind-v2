@@ -6,7 +6,7 @@ from django.urls import path
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.http import JsonResponse
-from .models import Session, ChatMessage, Report, OpenAIAPIKey, ModelConfiguration, AIProviderKey, AIModel, UserProfile, EmailVerificationToken, UserEmail
+from .models import Session, ChatMessage, Report, OpenAIAPIKey, ModelConfiguration, AIProviderKey, AIModel, UserProfile, EmailVerificationToken, UserEmail, PendingUserRegistration
 import openai
 import logging
 
@@ -1566,6 +1566,39 @@ class UserProfileAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+
+@admin.register(PendingUserRegistration)
+class PendingUserRegistrationAdmin(admin.ModelAdmin):
+    """仮登録ユーザー管理"""
+    list_display = ['username', 'email', 'industry', 'verified', 'created_at', 'expires_at', 'is_expired']
+    list_filter = ['verified', 'industry', 'created_at']
+    search_fields = ['username', 'email']
+    readonly_fields = ['token', 'password_hash', 'created_at', 'verified_at']
+    
+    fieldsets = (
+        ('基本情報', {
+            'fields': ('username', 'email', 'password_hash')
+        }),
+        ('追加情報', {
+            'fields': ('industry', 'sales_experience', 'usage_purpose')
+        }),
+        ('認証情報', {
+            'fields': ('token', 'verified', 'verified_at', 'created_at', 'expires_at')
+        }),
+    )
+    
+    def is_expired(self, obj):
+        """有効期限切れかどうか"""
+        from django.utils import timezone
+        from django.utils.html import format_html
+        if obj.verified:
+            return format_html('<span style="color: green;">認証済み</span>')
+        elif timezone.now() > obj.expires_at:
+            return format_html('<span style="color: red;">期限切れ</span>')
+        else:
+            return format_html('<span style="color: orange;">認証待ち</span>')
+    is_expired.short_description = '状態'
 
 
 @admin.register(EmailVerificationToken)

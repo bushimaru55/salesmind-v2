@@ -67,34 +67,41 @@ def health(request):
 @authentication_classes([])  # CSRFトークン不要
 @permission_classes([AllowAny])
 def register_user(request):
-    """ユーザー登録エンドポイント（メール認証必須）"""
+    """ユーザー登録エンドポイント（メール認証完了後にユーザー作成）"""
     from django.conf import settings
     from django.utils import timezone
     from datetime import timedelta
-    from .models import UserProfile, EmailVerificationToken
-    from .email_service import send_verification_email
+    from django.contrib.auth.hashers import make_password
+    from .models import PendingUserRegistration
+    from .email_service import send_pending_registration_email
     
     username = request.data.get('username')
-    email = request.data.get('email')  # 必須化
+    email = request.data.get('email')
     password = request.data.get('password')
-    industry = request.data.get('industry')  # 新規
-    sales_experience = request.data.get('sales_experience')  # 新規（任意）
-    usage_purpose = request.data.get('usage_purpose')  # 新規（任意）
+    industry = request.data.get('industry')
+    sales_experience = request.data.get('sales_experience')
+    usage_purpose = request.data.get('usage_purpose')
     
     # バリデーション
     errors = {}
     if not username or not username.strip():
         errors['username'] = ["ユーザー名は必須です"]
+    # 既存ユーザーと仮登録の両方をチェック
     elif User.objects.filter(username=username).exists():
         errors['username'] = ["このユーザー名は既に使用されています"]
+    elif PendingUserRegistration.objects.filter(username=username, verified=False).exists():
+        errors['username'] = ["このユーザー名は既に仮登録されています。メール認証を完了してください。"]
     
     # メールアドレスは必須
     if not email or not email.strip():
         errors['email'] = ["メールアドレスは必須です"]
     elif not '@' in email:
         errors['email'] = ["有効なメールアドレスを入力してください"]
+    # 既存ユーザーと仮登録の両方をチェック
     elif User.objects.filter(email=email).exists():
         errors['email'] = ["このメールアドレスは既に使用されています"]
+    elif PendingUserRegistration.objects.filter(email=email, verified=False).exists():
+        errors['email'] = ["このメールアドレスは既に仮登録されています。メール認証を完了してください。"]
     
     if not password:
         errors['password'] = ["パスワードは必須です"]
@@ -114,41 +121,32 @@ def register_user(request):
     try:
         expires_at = timezone.now() + timedelta(hours=settings.EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS)
         
-        # ユーザーを作成（is_active=Falseで一時的に無効化）
-        user = User.objects.create_user(
+        # パスワードをハッシュ化
+        password_hash = make_password(password)
+        
+        # 仮登録情報を保存（実際のUserは作成しない）
+        pending = PendingUserRegistration.objects.create(
             username=username,
             email=email,
-            password=password,
-            is_active=False
-        )
-        
-        # プロファイルを作成（追加情報を含む）
-        profile = UserProfile.objects.create(
-            user=user,
-            email_verified=False,
+            password_hash=password_hash,
             industry=industry,
             sales_experience=sales_experience if sales_experience else None,
             usage_purpose=usage_purpose if usage_purpose else None,
-        )
-        
-        # メール認証トークンを生成
-        verification_token = EmailVerificationToken.objects.create(
-            user=user,
             expires_at=expires_at
         )
         
         # メールを送信
-        email_sent = send_verification_email(user, verification_token)
+        email_sent = send_pending_registration_email(pending)
         
         if not email_sent:
-            user.delete()
+            pending.delete()
             logger.warning(f"User registration failed: email send failed for {username}")
             return Response({
                 "error": "メール送信に失敗しました",
-                "message": "メールアドレスが正しいか確認してください。ユーザーは登録されていません。"
+                "message": "メールアドレスが正しいか確認してください。"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-        logger.info(f"User registration initiated: {username}, industry: {industry}, email sent to {email}")
+        logger.info(f"Pending user registration created: {username}, industry: {industry}, email sent to {email}")
         
         return Response({
             "message": "登録が完了しました。メールを確認して認証を完了してください。",
@@ -259,11 +257,11 @@ def login_user(request):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def verify_email(request):
-    """メール認証エンドポイント"""
+    """メール認証エンドポイント（認証完了時にユーザー作成）"""
     from django.conf import settings
     from django.utils import timezone
     from django.shortcuts import redirect
-    from .models import UserProfile, EmailVerificationToken
+    from .models import UserProfile, PendingUserRegistration
     from urllib.parse import urlencode
     
     token_str = request.query_params.get('token')
@@ -284,38 +282,53 @@ def verify_email(request):
         except ValueError:
             return redirect_error("invalid_format", "認証リンクの形式が正しくありません")
         
-        # トークンを取得
-        verification_token = EmailVerificationToken.objects.get(token=token_str)
+        # 仮登録情報を取得
+        pending = PendingUserRegistration.objects.get(token=token_str)
         
         # トークンの有効性をチェック
-        if not verification_token.is_valid():
-            return redirect_error("expired", "この認証リンクは期限切れか、既に使用されています")
+        if not pending.is_valid():
+            if pending.verified:
+                return redirect_error("already_verified", "このアカウントは既に認証済みです")
+            else:
+                return redirect_error("expired", "この認証リンクは期限切れです")
         
-        user = verification_token.user
+        # ユーザー名・メールアドレスの重複チェック（念のため）
+        if User.objects.filter(username=pending.username).exists():
+            return redirect_error("username_exists", "このユーザー名は既に使用されています")
+        if User.objects.filter(email=pending.email).exists():
+            return redirect_error("email_exists", "このメールアドレスは既に使用されています")
         
-        # プロファイルを取得または作成
-        profile, _ = UserProfile.objects.get_or_create(user=user)
+        # トランザクション内でユーザーとプロファイルを作成
+        with transaction.atomic():
+            # ユーザーを作成（is_active=Trueですぐに有効化）
+            user = User.objects.create(
+                username=pending.username,
+                email=pending.email,
+                password=pending.password_hash,  # 既にハッシュ化済み
+                is_active=True
+            )
+            
+            # プロファイルを作成
+            profile = UserProfile.objects.create(
+                user=user,
+                email_verified=True,
+                email_verified_at=timezone.now(),
+                industry=pending.industry,
+                sales_experience=pending.sales_experience,
+                usage_purpose=pending.usage_purpose,
+            )
+            
+            # 仮登録情報を認証済みとしてマーク
+            pending.verified = True
+            pending.verified_at = timezone.now()
+            pending.save()
         
-        # メール認証を完了
-        profile.email_verified = True
-        profile.email_verified_at = timezone.now()
-        profile.save()
-        
-        # ユーザーを有効化
-        user.is_active = True
-        user.save()
-        
-        # トークンを使用済みにする
-        verification_token.used = True
-        verification_token.used_at = timezone.now()
-        verification_token.save()
-        
-        logger.info(f"Email verified for user {user.username}")
+        logger.info(f"Email verified and user created: {user.username}")
         
         # 成功時はHTMLページにリダイレクト
         return redirect('/email_verified.html')
         
-    except EmailVerificationToken.DoesNotExist:
+    except PendingUserRegistration.DoesNotExist:
         return redirect_error("not_found", "認証リンクが見つかりません")
     except Exception as e:
         logger.error(f"Email verification failed: {e}", exc_info=True)
