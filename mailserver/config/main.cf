@@ -1,0 +1,60 @@
+# Postfixメイン設定ファイル
+
+# 基本設定
+myhostname = mail.salesmind.mind-bridge.tech
+mydomain = salesmind.mind-bridge.tech
+myorigin = $mydomain
+
+# ネットワーク設定
+inet_interfaces = all
+inet_protocols = ipv4
+
+# ドメインとネットワーク
+mydestination = $myhostname, localhost.$mydomain, localhost, $mydomain
+
+# リレー設定（外部メール送信を許可）
+relayhost =
+# Dockerネットワークからの接続を許可
+mynetworks = 172.16.0.0/12, 192.168.0.0/16, 10.0.0.0/8, 127.0.0.0/8, 172.0.0.0/8
+
+# メールボックス設定
+home_mailbox = Maildir/
+mailbox_command =
+
+# セキュリティ設定
+smtpd_banner = $myhostname ESMTP
+disable_vrfy_command = yes
+smtpd_helo_required = yes
+
+# TLS設定
+smtpd_tls_cert_file = /etc/ssl/certs/ssl-cert-snakeoil.pem
+smtpd_tls_key_file = /etc/ssl/private/ssl-cert-snakeoil.key
+smtpd_use_tls = yes
+smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
+smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
+
+# SMTP認証設定
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_type = cyrus
+smtpd_sasl_path = smtpd
+smtpd_sasl_local_domain = $myhostname
+smtpd_sasl_security_options = noanonymous
+smtpd_sasl_tls_security_options = noanonymous
+
+# 認証済みユーザーのリレー許可
+smtpd_recipient_restrictions = 
+    permit_mynetworks,
+    permit_sasl_authenticated,
+    reject_unauth_destination,
+    permit
+
+# ヘッダー設定（コメントアウト - 設定ファイルが存在しないため）
+# smtpd_header_checks = regexp:/etc/postfix/header_checks
+
+# ログ設定
+maillog_file = /var/log/postfix.log
+
+# メールサイズ制限（10MB）
+message_size_limit = 10485760
+mailbox_size_limit = 0
+

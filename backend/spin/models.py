@@ -561,3 +561,77 @@ class Report(models.Model):
     def __str__(self):
         return f"Report for Session {self.session.id}"
 
+
+class UserProfile(models.Model):
+    """ユーザープロファイル（メール認証情報など）"""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    email_verified = models.BooleanField(default=False, help_text="メールアドレスの認証状況")
+    email_verified_at = models.DateTimeField(null=True, blank=True, help_text="メール認証完了日時")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"Profile for {self.user.username}"
+    
+    class Meta:
+        verbose_name = "ユーザープロファイル"
+        verbose_name_plural = "ユーザープロファイル"
+
+
+class EmailVerificationToken(models.Model):
+    """メール認証トークン"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='email_verification_tokens')
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(help_text="トークンの有効期限")
+    used = models.BooleanField(default=False, help_text="使用済みフラグ")
+    used_at = models.DateTimeField(null=True, blank=True, help_text="使用日時")
+    
+    def is_valid(self):
+        """トークンが有効かチェック"""
+        from django.utils import timezone
+        return not self.used and timezone.now() < self.expires_at
+    
+    def __str__(self):
+        return f"Email verification token for {self.user.username}"
+    
+    class Meta:
+        verbose_name = "メール認証トークン"
+        verbose_name_plural = "メール認証トークン"
+        ordering = ['-created_at']
+
+
+class UserEmail(models.Model):
+    """ユーザーの複数メールアドレス管理"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_emails')
+    email = models.EmailField(help_text="メールアドレス")
+    is_verification_email = models.BooleanField(
+        default=False,
+        help_text="ログイン認証メール送信用に使用するメールアドレス（1ユーザーに1つまで）"
+    )
+    verified = models.BooleanField(default=False, help_text="メールアドレスの認証状況")
+    verified_at = models.DateTimeField(null=True, blank=True, help_text="認証完了日時")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        status = "（認証メール送信用）" if self.is_verification_email else ""
+        verified_status = "認証済み" if self.verified else "未認証"
+        return f"{self.email} {status} [{verified_status}]"
+    
+    class Meta:
+        verbose_name = "ユーザーメールアドレス"
+        verbose_name_plural = "ユーザーメールアドレス"
+        unique_together = [['user', 'email']]  # 同一ユーザーに同じメールアドレスを重複登録できない
+        ordering = ['-is_verification_email', 'created_at']
+    
+    def save(self, *args, **kwargs):
+        """保存時にis_verification_emailの重複をチェック"""
+        # 他のメールアドレスがis_verification_email=Trueの場合、それをFalseにする
+        if self.is_verification_email:
+            UserEmail.objects.filter(
+                user=self.user,
+                is_verification_email=True
+            ).exclude(pk=self.pk if self.pk else None).update(is_verification_email=False)
+        super().save(*args, **kwargs)
+

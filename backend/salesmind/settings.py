@@ -163,6 +163,49 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
+# Email Configuration
+# 開発環境ではMailHog、本番環境では実際のSMTPサーバーを使用
+DEBUG_MODE = os.getenv('DEBUG', 'True') == 'True'
+
+# メールサーバー設定
+# システムドメインのメールサーバー（Postfixコンテナ）を使用
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
+if DEBUG_MODE:
+    # 開発環境: MailHog（オプション）またはシステムメールサーバー
+    use_mailhog = os.getenv('USE_MAILHOG', 'False') == 'True'
+    if use_mailhog:
+        EMAIL_HOST = 'mailhog'
+        EMAIL_PORT = 1025
+        EMAIL_USE_TLS = False
+        EMAIL_USE_SSL = False
+        EMAIL_HOST_USER = ''
+        EMAIL_HOST_PASSWORD = ''
+    else:
+        # 開発環境: システムメールサーバー（Postfixコンテナ）を使用
+        EMAIL_HOST = os.getenv('EMAIL_HOST', 'mailserver')  # Dockerコンテナ名
+        EMAIL_PORT = int(os.getenv('EMAIL_PORT', '25'))
+        EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'False') == 'True'
+        EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False') == 'True'
+        EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+        EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+else:
+    # 本番環境: システムメールサーバー（Postfixコンテナ）を使用
+    EMAIL_HOST = os.getenv('EMAIL_HOST', 'mailserver')  # Dockerコンテナ名
+    EMAIL_PORT = int(os.getenv('EMAIL_PORT', '25'))
+    EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'False') == 'True'
+    EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False') == 'True'
+    EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+    EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@salesmind.mind-bridge.tech')
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
+# メール認証関連設定
+EMAIL_VERIFICATION_REQUIRED = os.getenv('EMAIL_VERIFICATION_REQUIRED', 'True') == 'True'
+EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS = int(os.getenv('EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS', '24'))
+SITE_URL = os.getenv('SITE_URL', 'https://salesmind.mind-bridge.tech')
+
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 

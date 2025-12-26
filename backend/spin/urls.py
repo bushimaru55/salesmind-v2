@@ -10,6 +10,7 @@ urlpatterns = [
     # 認証
     path('auth/register/', views.register_user, name='register_user'),
     path('auth/login/', views.login_user, name='login_user'),
+    path('auth/verify-email/', views.verify_email, name='verify_email'),
 
     # SPIN質問生成
     path('spin/generate/', views.generate_spin, name='generate_spin'),

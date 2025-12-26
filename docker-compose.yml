@@ -53,10 +53,41 @@ services:
       - ./frontend:/var/www/certbot:rw
     networks:
       - salesmind_network
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: salesmind_mailhog
+    ports:
+      - "8025:8025"  # Web UI (メール確認用)
+      - "1025:1025"  # SMTP server
+    networks:
+      - salesmind_network
+  mailserver:
+    build: ./mailserver
+    container_name: salesmind_mailserver
+    hostname: mail.salesmind.mind-bridge.tech
+    domainname: salesmind.mind-bridge.tech
+    ports:
+      - "25:25"    # SMTP
+      - "587:587"  # SMTP Submission (TLS)
+      - "465:465"  # SMTPS (SSL)
+    environment:
+      - POSTFIX_MYHOSTNAME=mail.salesmind.mind-bridge.tech
+      - POSTFIX_MYDOMAIN=salesmind.mind-bridge.tech
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    volumes:
+      - mailserver_data:/var/spool/postfix
+      - mailserver_logs:/var/log/postfix
+    networks:
+      - salesmind_network
+    restart: unless-stopped
 volumes:
   postgres_data:
   certbot-etc:
   certbot-var:
+  mailserver_data:
+  mailserver_logs:
 
 networks:
   salesmind_network:

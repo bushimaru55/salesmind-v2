@@ -6,7 +6,7 @@ from django.urls import path
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.http import JsonResponse
-from .models import Session, ChatMessage, Report, OpenAIAPIKey, ModelConfiguration, AIProviderKey, AIModel
+from .models import Session, ChatMessage, Report, OpenAIAPIKey, ModelConfiguration, AIProviderKey, AIModel, UserProfile, EmailVerificationToken, UserEmail
 import openai
 import logging
 
@@ -21,12 +21,30 @@ admin.site.index_title = 'ダッシュボード'
 admin.site.unregister(User)
 
 
+class UserEmailInline(admin.TabularInline):
+    """ユーザー詳細ページでメールアドレスをインライン表示・編集"""
+    model = UserEmail
+    extra = 1
+    fields = ['email', 'is_verification_email', 'verified', 'verified_at', 'created_at']
+    readonly_fields = ['verified_at', 'created_at']
+    ordering = ['-is_verification_email', '-created_at']
+    
+    def get_readonly_fields(self, request, obj=None):
+        """新規作成時のみverified_atを読み取り専用にする"""
+        readonly = list(self.readonly_fields)
+        if obj is None:  # 新規作成時
+            readonly.append('verified_at')
+        return readonly
+
+
 @admin.register(User)
 class CustomUserAdmin(BaseUserAdmin):
     """カスタムユーザー管理画面"""
     
+    inlines = [UserEmailInline]
+    
     # 一覧表示
-    list_display = ['username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'is_superuser', 'session_count', 'last_login', 'date_joined']
+    list_display = ['username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'is_superuser', 'email_verified_display', 'session_count', 'last_login', 'date_joined']
     list_filter = ['is_staff', 'is_superuser', 'is_active', 'date_joined', 'last_login']
     search_fields = ['username', 'email', 'first_name', 'last_name']
     ordering = ['-date_joined']
@@ -87,6 +105,16 @@ class CustomUserAdmin(BaseUserAdmin):
             return format_html('<a href="/admin/spin/report/?session__user__id__exact={}">{} レポート</a>', obj.id, count)
         return "0 レポート"
     report_count_display.short_description = 'レポート数'
+    
+    def email_verified_display(self, obj):
+        """メール認証状況を表示"""
+        if hasattr(obj, 'profile'):
+            if obj.profile.email_verified:
+                return format_html('<span style="color: green;">✓ 認証済み</span>')
+            else:
+                return format_html('<span style="color: red;">✗ 未認証</span>')
+        return "プロファイルなし"
+    email_verified_display.short_description = 'メール認証'
 
 
 class ChatMessageInline(admin.TabularInline):
@@ -1484,3 +1512,53 @@ class AIModelAdmin(admin.ModelAdmin):
         return '-'
     estimated_cost_display.short_description = '推定コスト例'
 
+@admin.register(UserEmail)
+class UserEmailAdmin(admin.ModelAdmin):
+    """ユーザーメールアドレス管理画面"""
+    list_display = ['user', 'email', 'is_verification_email', 'verified', 'verified_at', 'created_at']
+    list_filter = ['is_verification_email', 'verified', 'created_at']
+    search_fields = ['user__username', 'email']
+    readonly_fields = ['created_at', 'updated_at']
+    ordering = ['user', '-is_verification_email', '-created_at']
+    
+    fieldsets = (
+        ('基本情報', {
+            'fields': ('user', 'email')
+        }),
+        ('設定', {
+            'fields': ('is_verification_email', 'verified', 'verified_at')
+        }),
+        ('日時情報', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def save_model(self, request, obj, form, change):
+        """保存時にis_verification_emailの重複をチェック"""
+        super().save_model(request, obj, form, change)
+        
+        # is_verification_emailがTrueの場合、他のメールアドレスのis_verification_emailをFalseにする
+        if obj.is_verification_email:
+            UserEmail.objects.filter(
+                user=obj.user,
+                is_verification_email=True
+            ).exclude(pk=obj.pk).update(is_verification_email=False)
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    """ユーザープロファイル管理画面"""
+    list_display = ['user', 'email_verified', 'email_verified_at', 'created_at']
+    list_filter = ['email_verified', 'created_at']
+    search_fields = ['user__username', 'user__email']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(EmailVerificationToken)
+class EmailVerificationTokenAdmin(admin.ModelAdmin):
+    """メール認証トークン管理画面"""
+    list_display = ['user', 'token', 'created_at', 'expires_at', 'used', 'used_at']
+    list_filter = ['used', 'created_at', 'expires_at']
+    search_fields = ['user__username', 'user__email', 'token']
+    readonly_fields = ['token', 'created_at', 'expires_at']

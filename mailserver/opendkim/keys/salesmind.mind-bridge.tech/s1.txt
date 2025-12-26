@@ -1,0 +1,3 @@
+s1._domainkey	IN	TXT	( "v=DKIM1; h=sha256; k=rsa; "
+	  "p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAll+whq7crFQdEVrIz99rCrskpeLqOBFeus7ebbFJz32zTyrMp6cC0lrnXcTBeN+zGcQ2z53gmJ5/eOEb6X5RqJ533Os5GTH7R4czXiR8V5ey5rR89tlLjCiER+T39Sio6XU3/MvGlQtKCHrZRODaYtJ2g6enfmPV116SS2oi9DXCANPrp9gf5qnAUDSFwgtCjaRXP48MAJV9vt"
+	  "3R2sbVS2kYDpxYo4c+3veSNFQDoMoHIvwUFjpH7ikF+pBDwUkhf2WVB+1Kx17zizCJhzhMZGhjFMn2JlTGBEXy7llkkIiPihvMiIp4x57JZuHmTC+rOrJpUkvoXPig09rlyEQ9TwIDAQAB" )  ; ----- DKIM key s1 for salesmind.mind-bridge.tech

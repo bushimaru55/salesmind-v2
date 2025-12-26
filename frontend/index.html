@@ -83,11 +83,13 @@
                 </div>
                 <div id="registerForm" class="auth-form" style="display: none;">
                     <h3>新規登録</h3>
-                    <input type="text" id="registerUsername" placeholder="ユーザー名（3文字以上）">
-                    <input type="email" id="registerEmail" placeholder="メールアドレス（オプション）">
-                    <input type="password" id="registerPassword" placeholder="パスワード（6文字以上）">
+                    <input type="text" id="registerUsername" placeholder="ユーザー名" required>
+                    <input type="email" id="registerEmail" placeholder="メールアドレス（任意）">
+                    <input type="password" id="registerPassword" placeholder="パスワード（6文字以上）" required>
+                    <p style="font-size: 0.85rem; color: #666; margin: 10px 0;">メールアドレスを入力した場合、登録後に認証リンクを送信します</p>
                     <button onclick="register()">登録</button>
                     <div id="registerError" class="error-message" style="display: none;"></div>
+                    <div id="registerSuccess" class="success-message" style="display: none;"></div>
                 </div>
                 <div id="userInfo" class="user-info" style="display: none;">
                     <span>ようこそ、<strong id="usernameDisplay"></strong>さん</span>

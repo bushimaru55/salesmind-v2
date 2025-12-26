@@ -178,16 +178,16 @@ async function register() {
         window.logger.info('ユーザー登録を開始');
     }
     const username = document.getElementById('registerUsername').value.trim();
-    const email = document.getElementById('registerEmail').value.trim();
+    const email = document.getElementById('registerEmail').value.trim() || null;  // 空の場合はnull
     const password = document.getElementById('registerPassword').value;
     
-    if (!username || !password) {
-        showError('registerError', 'ユーザー名とパスワードは必須です');
+    if (!username || !username.trim()) {
+        showError('registerError', 'ユーザー名は必須です');
         return;
     }
     
-    if (username.length < 3) {
-        showError('registerError', 'ユーザー名は3文字以上で入力してください');
+    if (!password) {
+        showError('registerError', 'パスワードは必須です');
         return;
     }
     
@@ -215,19 +215,41 @@ async function register() {
         const data = await response.json();
         
         if (response.ok) {
-            // 登録成功 - Tokenを保存
-            authToken = data.token;
-            localStorage.setItem('authToken', authToken);
-            localStorage.setItem('username', data.user.username);
+            // 登録成功
+            let successMsg;
+            if (data.email_verification_required && data.user.email) {
+                // メール認証が必要な場合
+                successMsg = `メールアドレス（${data.user.email}）に認証リンクを送信しました。\n\nメールを確認して、認証リンクをクリックしてください。\n認証完了後、ログインできるようになります。`;
+            } else {
+                // メール認証が不要な場合（メールアドレス未入力）
+                successMsg = 'ユーザー登録が完了しました。\n\nログインできます。';
+            }
             
-            showSuccess('ユーザー登録が完了しました');
+            // 成功メッセージを表示
+            const successDiv = document.getElementById('registerSuccess');
+            successDiv.textContent = successMsg;
+            successDiv.style.display = 'block';
+            successDiv.style.color = '#28a745';
+            successDiv.style.backgroundColor = '#d4edda';
+            successDiv.style.border = '1px solid #c3e6cb';
+            successDiv.style.borderRadius = '4px';
+            successDiv.style.padding = '10px';
+            successDiv.style.marginTop = '10px';
+            successDiv.style.whiteSpace = 'pre-line';
             
-            // ログイン状態にする
-            document.getElementById('loginForm').style.display = 'none';
+            // エラーメッセージを非表示
+            document.getElementById('registerError').style.display = 'none';
             
-            // ログイン状態にする
-            closeAuthModal();
-            checkAuth();
+            // フォームをクリア
+            document.getElementById('registerUsername').value = '';
+            document.getElementById('registerEmail').value = '';
+            document.getElementById('registerPassword').value = '';
+            
+            // 5秒後にログインフォームに切り替え
+            setTimeout(() => {
+                showLoginTab();
+                document.getElementById('registerSuccess').style.display = 'none';
+            }, 5000);
         } else {
             // エラー表示
             let errorMsg = 'ユーザー登録に失敗しました';
@@ -298,6 +320,12 @@ async function login() {
             console.error('Failed to parse JSON response:', jsonError);
             console.error('Response text:', responseText);
             showError('loginError', 'サーバーからの応答を解析できませんでした: ' + responseText);
+            return;
+        }
+        
+        // メール認証が必要な場合のエラーハンドリング
+        if (response.status === 403 && data.email_verification_required) {
+            showError('loginError', data.message || 'メールアドレスが認証されていません。登録時に送信されたメールを確認して、認証リンクをクリックしてください。');
             return;
         }
         
