@@ -72,3 +72,14 @@ backend/salesmind-*.json
 backend/*-*-*-*.json
 
 backend/staticfiles/
+
+# Test and utility scripts (temporary)
+backend/test_*.py
+backend/check_*.py
+backend/delete_*.py
+backend/create_*.py
+backend/list_*.py
+
+# Temporary configuration files (root level)
+/TrustedHosts
+/opendkim.conf
