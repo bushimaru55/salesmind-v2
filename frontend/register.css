@@ -140,12 +140,16 @@ body {
 }
 
 .success-message {
-    background: #efe;
-    color: #3c3;
-    padding: 12px;
-    border-radius: 6px;
+    background: #d4edda;
+    color: #155724;
+    padding: 20px;
+    border-radius: 8px;
     margin-top: 15px;
-    border-left: 4px solid #3c3;
+    border-left: 4px solid #28a745;
+    line-height: 1.8;
+    text-align: left;
+    font-size: 15px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .login-link {

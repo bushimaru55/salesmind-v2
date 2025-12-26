@@ -48,12 +48,18 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         const data = await response.json();
         
         if (response.ok) {
-            showSuccess(data.message || '登録が完了しました。メールを確認して認証を完了してください。');
+            const message = `登録が完了しました！
+
+📧 ${data.email || formData.email} 宛てに認証メールを送信しました。
+
+⚠️ Gmailをご利用の場合、迷惑メールフォルダに入っている可能性があります。
+受信トレイと迷惑メールフォルダの両方をご確認ください。
+
+メール内のリンクをクリックして認証を完了してください。`;
             
-            // 5秒後にログインページにリダイレクト
-            setTimeout(() => {
-                window.location.href = 'index.html';
-            }, 5000);
+            showSuccess(message);
+            
+            // メッセージをしっかり読んでもらうため、自動リダイレクトは削除
         } else {
             let errorMsg = '登録に失敗しました';
             if (data.details) {
@@ -78,7 +84,8 @@ function showError(message) {
 
 function showSuccess(message) {
     const successDiv = document.getElementById('success');
-    successDiv.textContent = message;
+    // 改行を保持するため、textContentではなくinnerHTMLを使用し、改行を<br>に変換
+    successDiv.innerHTML = message.split('\n').map(line => line.trim()).filter(line => line).join('<br>');
     successDiv.style.display = 'block';
     document.getElementById('error').style.display = 'none';
 }
