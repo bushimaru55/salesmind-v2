@@ -62,6 +62,7 @@ if not DEBUG:
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",  # Channels ASGI server - must be first
     "admin_interface",
     "colorfield",
     "django.contrib.admin",
@@ -73,6 +74,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "corsheaders",
+    "channels",  # Django Channels for WebSocket support
     "spin",
     "email_management",
 ]
@@ -107,6 +109,15 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "salesmind.wsgi.application"
 
+# ASGI Application (for WebSocket support via Django Channels)
+ASGI_APPLICATION = "salesmind.asgi.application"
+
+# Channel Layers configuration for Django Channels
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases

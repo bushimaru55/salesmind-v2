@@ -12,4 +12,8 @@ gunicorn
 google-cloud-speech>=2.19.0
 pydub>=0.25.1
 django-admin-interface[colorfield]
+channels>=4.0.0
+channels-redis>=4.0.0
+websockets>=12.0
+daphne>=4.0.0
 
