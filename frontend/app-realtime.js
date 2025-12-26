@@ -41,6 +41,12 @@ async function toggleRealtimeTalk() {
         return;
     }
     
+    // 簡易診断モードではリアルタイム会話を使用できない
+    if (typeof currentMode !== 'undefined' && currentMode === 'simple') {
+        alert('簡易診断モードではリアルタイム会話は使用できません。\n詳細診断モードをご利用ください。');
+        return;
+    }
+    
     if (isRealtimeTalking) {
         // 会話停止
         stopRealtimeConversation();
@@ -78,9 +84,33 @@ async function startRealtimeConversation() {
         updateRealtimeStatus('connecting');
         updateRealtimeButton(true, '接続中...');
         
+        // セッション情報を取得（グローバル変数から）
+        let sessionInfo = null;
+        
+        if (typeof currentSessionInfo !== 'undefined' && currentSessionInfo) {
+            // app.js で保存されたセッション情報を使用
+            sessionInfo = currentSessionInfo;
+            console.log('📋 セッション情報（グローバル変数から取得）:', sessionInfo);
+        } else {
+            // フォールバック: 企業情報から取得
+            sessionInfo = {
+                customer_persona: null,
+                industry: null,
+                company_name: null,
+                value_proposition: null
+            };
+            
+            if (typeof currentCompanyInfo !== 'undefined' && currentCompanyInfo) {
+                sessionInfo.company_name = currentCompanyInfo.company_name;
+                sessionInfo.industry = currentCompanyInfo.industry;
+            }
+            
+            console.log('📋 セッション情報（フォールバック）:', sessionInfo);
+        }
+        
         // RealtimeClientを初期化
         if (!realtimeClient) {
-            realtimeClient = new RealtimeClient(authToken, currentSessionId);
+            realtimeClient = new RealtimeClient(authToken, currentSessionId, sessionInfo);
             
             // イベントハンドラーを設定
             realtimeClient.onConnected = () => {
@@ -120,6 +150,8 @@ async function startRealtimeConversation() {
                 if (window.logger) {
                     window.logger.info('AI応答完了', response);
                 }
+                // AI応答が完了したら、次の応答は新しいメッセージとして作成
+                currentAIMessageId = null;
             };
             
             realtimeClient.onError = (error) => {

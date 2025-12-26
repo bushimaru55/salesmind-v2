@@ -4,9 +4,10 @@
  * リアルタイム音声会話を管理します
  */
 class RealtimeClient {
-    constructor(authToken, sessionId = null) {
+    constructor(authToken, sessionId = null, sessionInfo = null) {
         this.authToken = authToken;
         this.sessionId = sessionId;
+        this.sessionInfo = sessionInfo;  // セッション情報（企業情報、ペルソナ等）
         this.ws = null;
         this.isConnected = false;
         this.audioContext = null;
@@ -248,6 +249,44 @@ class RealtimeClient {
     }
     
     /**
+     * セッション情報から顧客ペルソナのinstructionsを生成
+     */
+    _buildCustomerInstructions() {
+        let instructions = `あなたは「顧客」役です。営業担当者から商品やサービスの提案を受ける立場として会話してください。
+
+重要なルール：
+- あなたは「顧客」です。営業担当者ではありません。
+- 営業担当者からの提案に対して、質問したり、懸念を表明したり、興味を示したりしてください。
+- 自分から商品を売り込んだり、営業トークをしないでください。
+- 日本語で自然に会話してください。
+`;
+        
+        // セッション情報がある場合、詳細なペルソナを追加
+        if (this.sessionInfo) {
+            if (this.sessionInfo.customer_persona) {
+                instructions += `\n【あなたの役割・立場】\n${this.sessionInfo.customer_persona}\n`;
+            }
+            
+            if (this.sessionInfo.industry) {
+                instructions += `\n【あなたの業界】\n${this.sessionInfo.industry}\n`;
+            }
+            
+            if (this.sessionInfo.company_name) {
+                instructions += `\n【あなたの会社名】\n${this.sessionInfo.company_name}\n`;
+            }
+            
+            if (this.sessionInfo.value_proposition) {
+                instructions += `\n【営業担当者が提案しようとしている商品・サービス】\n${this.sessionInfo.value_proposition}\n（注意：これはあなたが売るものではなく、営業担当者から提案されるものです）\n`;
+            }
+        }
+        
+        instructions += `\n顧客として自然に振る舞い、営業担当者の話を聞いて適切に反応してください。`;
+        
+        console.log('📝 生成されたinstructions:', instructions);
+        return instructions;
+    }
+    
+    /**
      * セッション設定を送信
      */
     _sendSessionConfig() {
@@ -256,24 +295,24 @@ class RealtimeClient {
             return;
         }
         
+        const instructions = this._buildCustomerInstructions();
+        
         const config = {
             type: 'session.update',
             session: {
-                modalities: ['text', 'audio'],
-                instructions: 'あなたはAI営業顧客として、営業担当者と会話します。日本語で応答してください。',
-                voice: 'alloy',  // alloy, echo, shimmer から選択
+                model: 'gpt-realtime',
+                modalities: ['audio', 'text'],
+                instructions: instructions,
+                voice: 'alloy',
                 input_audio_format: 'pcm16',
-                output_audio_format: 'pcm16',
                 input_audio_transcription: {
-                    model: 'whisper-1'
+                    model: 'gpt-4o-mini-transcribe',
+                    language: 'ja'
                 },
                 turn_detection: {
-                    type: 'server_vad',
-                    threshold: 0.5,
-                    prefix_padding_ms: 300,
-                    silence_duration_ms: 200
+                    type: 'server_vad'
                 },
-                temperature: 0.8
+                output_audio_format: 'pcm16'
             }
         };
         

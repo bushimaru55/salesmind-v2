@@ -10,6 +10,7 @@ let currentReportId = null;
 let currentMode = localStorage.getItem('currentMode') || null; // 'simple' or 'detailed'
 let currentCompanyId = null; // 取得した企業情報のIDを保持
 let currentCompanyInfo = null; // 取得した企業情報の内容を保存
+let currentSessionInfo = null; // セッション情報（ペルソナ、価値提案など）を保持
 
 // リアルタイム会話関連
 let conversationMode = 'text'; // 'text' or 'realtime'
@@ -54,6 +55,7 @@ function selectMode(mode) {
     if (mode === 'simple') {
         currentCompanyId = null;
         currentCompanyInfo = null;
+        currentSessionInfo = null;
 
         const companySummary = document.getElementById('companySummary');
         if (companySummary) {
@@ -100,6 +102,7 @@ function returnToModeSelection() {
     currentReportId = null;
     currentCompanyId = null;
     currentCompanyInfo = null;
+    currentSessionInfo = null;
     
     localStorage.removeItem('currentMode');
     
@@ -376,8 +379,16 @@ async function startDiagnosis() {
             currentSessionId = data.id;
             currentCompanyId = null; // 簡易診断モードでは企業情報なし
             
+            // セッション情報を保存（リアルタイム会話用）
+            currentSessionInfo = {
+                industry: industry,
+                value_proposition: value_proposition,
+                customer_persona: customer_persona || null,
+                company_name: null
+            };
+            
             if (window.logger) {
-                window.logger.info('セッション開始成功、チャット画面へ遷移', { sessionId: currentSessionId });
+                window.logger.info('セッション開始成功、チャット画面へ遷移', { sessionId: currentSessionId, sessionInfo: currentSessionInfo });
             }
             
             // 直接チャット画面へ遷移
@@ -652,12 +663,20 @@ async function startDetailedDiagnosis() {
         if (response.ok) {
             currentSessionId = data.id;
             
-            if (window.logger) {
-                window.logger.info('詳細診断セッション開始成功、チャット画面へ遷移', { sessionId: currentSessionId, companyId: currentCompanyId });
-            }
-            
             // チャット画面に企業情報を保存（表示用）
             currentCompanyInfo = companyData;
+            
+            // セッション情報を保存（リアルタイム会話用）
+            currentSessionInfo = {
+                industry: companyData?.industry || null,
+                value_proposition: value_proposition,
+                customer_persona: customer_persona || null,
+                company_name: companyData?.company_name || null
+            };
+            
+            if (window.logger) {
+                window.logger.info('詳細診断セッション開始成功、チャット画面へ遷移', { sessionId: currentSessionId, companyId: currentCompanyId, sessionInfo: currentSessionInfo });
+            }
             
             // 直接チャット画面へ遷移
             showStep(3);
@@ -2028,6 +2047,46 @@ function showStep(stepNumber) {
         stepElement.style.display = 'block';
     } else {
         console.warn(`ステップ要素が見つかりません: ${stepId}`);
+    }
+    
+    // チャット画面（step3）の場合、モードに応じてリアルタイム会話オプションを制御
+    if (stepId === 'step3') {
+        updateChatModeAvailability();
+    }
+}
+
+/**
+ * チャットモードの利用可能性を更新
+ * 簡易診断モード: テキストのみ
+ * 詳細診断モード: テキスト + リアルタイム会話
+ */
+function updateChatModeAvailability() {
+    const modeToggle = document.querySelector('.mode-toggle');
+    const realtimeOption = document.querySelector('input[name="chatMode"][value="realtime"]');
+    const realtimeLabel = realtimeOption ? realtimeOption.closest('.mode-option') : null;
+    
+    if (currentMode === 'simple') {
+        // 簡易診断モード: リアルタイム会話を非表示
+        if (realtimeLabel) {
+            realtimeLabel.style.display = 'none';
+        }
+        // テキストモードを強制選択
+        const textOption = document.querySelector('input[name="chatMode"][value="text"]');
+        if (textOption) {
+            textOption.checked = true;
+            switchChatMode('text');
+        }
+        if (window.logger) {
+            window.logger.info('簡易診断モード: リアルタイム会話は無効');
+        }
+    } else if (currentMode === 'detailed') {
+        // 詳細診断モード: リアルタイム会話を表示
+        if (realtimeLabel) {
+            realtimeLabel.style.display = '';
+        }
+        if (window.logger) {
+            window.logger.info('詳細診断モード: リアルタイム会話が利用可能');
+        }
     }
 }
 

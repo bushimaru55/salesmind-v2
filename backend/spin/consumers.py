@@ -130,13 +130,21 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             
             elif bytes_data:
                 # バイナリデータ（音声）の場合
+                # OpenAI Realtime APIはJSON形式のinput_audio_buffer.appendイベントを期待
                 bytes_len = len(bytes_data)
                 logger.debug(f"🎤 クライアントから音声データ受信: {bytes_len} bytes")
                 
                 if self.openai_ws:
                     try:
-                        await self.openai_ws.send(bytes_data)
-                        logger.debug(f"✅ OpenAIへ音声転送成功: {bytes_len} bytes")
+                        # PCM16バイナリをBase64エンコードしてJSON形式で送信
+                        import base64
+                        audio_base64 = base64.b64encode(bytes_data).decode('utf-8')
+                        audio_event = {
+                            "type": "input_audio_buffer.append",
+                            "audio": audio_base64
+                        }
+                        await self.openai_ws.send(json.dumps(audio_event))
+                        logger.debug(f"✅ OpenAIへ音声転送成功: {bytes_len} bytes (Base64)")
                     except Exception as e:
                         logger.error(f"❌ OpenAIへの音声送信失敗: {e}", exc_info=True)
                     

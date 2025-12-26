@@ -262,10 +262,6 @@
                         <!-- テキスト入力エリア（テキストモード時） -->
                         <div id="textInputArea" class="input-mode-area">
                             <input type="text" id="chatMessageInput" placeholder="営業担当者の質問を入力..." onkeypress="handleChatKeyPress(event)">
-                            <button id="micButton" onclick="toggleVoiceRecording()" class="btn-mic" title="音声入力">
-                                <i class="fas fa-microphone"></i>
-                            </button>
-                            <span id="recordingTime" class="recording-time" style="display: none;">00:00</span>
                             <button onclick="sendChatMessage()" class="btn-primary">送信</button>
                         </div>
                         
