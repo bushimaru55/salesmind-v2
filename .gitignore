@@ -77,8 +77,11 @@ backend/staticfiles/
 backend/test_*.py
 backend/check_*.py
 backend/delete_*.py
-backend/create_*.py
 backend/list_*.py
+
+# Keep essential setup scripts
+!backend/create_initial_email_templates.py
+!backend/create_initial_system_emails.py
 
 # Temporary configuration files (root level)
 /TrustedHosts

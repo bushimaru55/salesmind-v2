@@ -1,0 +1,101 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+
+{% block after_field_sets %}
+{{ block.super }}
+
+{% if original %}
+<div class="module" style="margin-top: 20px;">
+    <h2 style="background-color: #417690; color: white; padding: 10px; margin: 0;">テストメール送信</h2>
+    <div style="padding: 20px; background-color: #f9f9f9; border: 1px solid #ddd;">
+        <p style="color: #666; margin-bottom: 15px;">
+            このテンプレートの内容でテストメールを送信します。<br>
+            変数にはサンプルデータが入力されます。
+        </p>
+        <form id="test-send-form" style="margin: 0;">
+            {% csrf_token %}
+            <div style="margin-bottom: 15px;">
+                <label for="test_email" style="display: block; margin-bottom: 5px; font-weight: bold;">
+                    送信先メールアドレス:
+                </label>
+                <input 
+                    type="email" 
+                    id="test_email" 
+                    name="test_email" 
+                    required
+                    placeholder="例: test@example.com"
+                    style="width: 100%; max-width: 400px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;"
+                >
+            </div>
+            <button 
+                type="submit" 
+                class="button" 
+                style="background-color: #417690; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;"
+            >
+                📧 テストメール送信
+            </button>
+            <span id="test-send-loading" style="display: none; margin-left: 10px; color: #666;">
+                送信中...
+            </span>
+        </form>
+        <div id="test-send-result" style="margin-top: 15px; display: none; padding: 10px; border-radius: 4px;"></div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const form = document.getElementById('test-send-form');
+    const loadingSpan = document.getElementById('test-send-loading');
+    const resultDiv = document.getElementById('test-send-result');
+    
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const email = document.getElementById('test_email').value;
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        
+        if (!email) {
+            showResult('メールアドレスを入力してください。', false);
+            return;
+        }
+        
+        // ローディング表示
+        loadingSpan.style.display = 'inline';
+        resultDiv.style.display = 'none';
+        
+        // AJAX送信
+        fetch('{% url "admin:email_management_emailtemplate_test_send" original.pk %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': csrfToken
+            },
+            body: new URLSearchParams({
+                'test_email': email
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            loadingSpan.style.display = 'none';
+            showResult(data.message, data.success);
+        })
+        .catch(error => {
+            loadingSpan.style.display = 'none';
+            showResult('エラーが発生しました: ' + error.message, false);
+        });
+    });
+    
+    function showResult(message, isSuccess) {
+        resultDiv.textContent = message;
+        resultDiv.style.display = 'block';
+        resultDiv.style.backgroundColor = isSuccess ? '#d4edda' : '#f8d7da';
+        resultDiv.style.color = isSuccess ? '#155724' : '#721c24';
+        resultDiv.style.borderColor = isSuccess ? '#c3e6cb' : '#f5c6cb';
+        resultDiv.style.border = '1px solid';
+    }
+})();
+</script>
+{% endif %}
+
+{% endblock %}
+

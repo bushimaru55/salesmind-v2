@@ -635,3 +635,136 @@ class UserEmail(models.Model):
             ).exclude(pk=self.pk if self.pk else None).update(is_verification_email=False)
         super().save(*args, **kwargs)
 
+
+class SystemEmailAddress(models.Model):
+    """システムで使用する送信元メールアドレス管理"""
+    email = models.EmailField(
+        unique=True,
+        help_text="送信元メールアドレス（例: noreply@salesmind.mind-bridge.tech）"
+    )
+    name = models.CharField(
+        max_length=100,
+        help_text="表示名（例: SalesMind サポート）"
+    )
+    purpose = models.CharField(
+        max_length=50,
+        choices=[
+            ('default', 'デフォルト（その他）'),
+            ('registration', '会員登録確認'),
+            ('password_reset', 'パスワードリセット'),
+            ('notification', '通知'),
+            ('support', 'サポート'),
+            ('marketing', 'マーケティング'),
+            ('system', 'システム通知'),
+        ],
+        default='default',
+        help_text="メール送信の用途"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="有効/無効"
+    )
+    is_default = models.BooleanField(
+        default=False,
+        help_text="デフォルト送信元として使用"
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="説明・用途メモ"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        app_label = 'email_management'
+        db_table = 'spin_systememailaddress'  # 既存のテーブル名を保持
+        verbose_name = "システムメールアドレス"
+        verbose_name_plural = "システムメールアドレス"
+        ordering = ['-is_default', 'purpose', 'email']
+    
+    def __str__(self):
+        return f"{self.email} ({self.get_purpose_display()})"
+    
+    def save(self, *args, **kwargs):
+        """is_defaultがTrueの場合、他のis_defaultをFalseに"""
+        if self.is_default:
+            SystemEmailAddress.objects.filter(
+                is_default=True
+            ).exclude(pk=self.pk if self.pk else None).update(is_default=False)
+        super().save(*args, **kwargs)
+
+
+class EmailTemplate(models.Model):
+    """メールテンプレート管理"""
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="テンプレート名（例: registration_email）"
+    )
+    display_name = models.CharField(
+        max_length=200,
+        help_text="表示名（例: 会員登録確認メール）"
+    )
+    purpose = models.CharField(
+        max_length=50,
+        choices=[
+            ('registration', '会員登録確認'),
+            ('password_reset', 'パスワードリセット'),
+            ('notification', '通知'),
+            ('welcome', 'ウェルカムメール'),
+            ('other', 'その他'),
+        ],
+        default='other',
+        help_text="メールの用途"
+    )
+    from_email = models.ForeignKey(
+        'SystemEmailAddress',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='email_templates',
+        help_text="送信元メールアドレス（空欄の場合はデフォルトを使用）"
+    )
+    subject = models.CharField(
+        max_length=200,
+        help_text="件名（変数使用可: {username}, {site_name}等）"
+    )
+    body_text = models.TextField(
+        help_text="本文（テキスト版）\n変数使用可: {username}, {verification_url}, {site_name}等"
+    )
+    body_html = models.TextField(
+        blank=True,
+        help_text="本文（HTML版・オプション）\n変数使用可: {username}, {verification_url}, {site_name}等"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="有効/無効"
+    )
+    available_variables = models.TextField(
+        blank=True,
+        help_text="利用可能な変数のリスト（参考用、カンマ区切り）\n例: username, email, verification_url, site_name"
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="説明・用途メモ"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        app_label = 'email_management'
+        db_table = 'email_management_emailtemplate'
+        verbose_name = "メールテンプレート"
+        verbose_name_plural = "メールテンプレート"
+        ordering = ['purpose', 'name']
+    
+    def __str__(self):
+        return f"{self.display_name} ({self.name})"
+    
+    def render(self, context):
+        """テンプレートを変数で置換してレンダリング"""
+        subject = self.subject.format(**context)
+        body_text = self.body_text.format(**context)
+        body_html = self.body_html.format(**context) if self.body_html else None
+        return subject, body_text, body_html
+
