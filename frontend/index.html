@@ -247,12 +247,36 @@
                     </div>
                     
                     <div class="chat-input-area">
-                        <input type="text" id="chatMessageInput" placeholder="営業担当者の質問を入力..." onkeypress="handleChatKeyPress(event)">
-                        <button id="micButton" onclick="toggleVoiceRecording()" class="btn-mic" title="音声入力">
-                            <i class="fas fa-microphone"></i>
-                        </button>
-                        <span id="recordingTime" class="recording-time" style="display: none;">00:00</span>
-                        <button onclick="sendChatMessage()" class="btn-primary">送信</button>
+                        <!-- モード切り替えトグル -->
+                        <div class="mode-toggle">
+                            <label class="mode-option">
+                                <input type="radio" name="chatMode" value="text" checked onchange="switchChatMode('text')">
+                                <span>💬 テキスト</span>
+                            </label>
+                            <label class="mode-option">
+                                <input type="radio" name="chatMode" value="realtime" onchange="switchChatMode('realtime')">
+                                <span>🎤 リアルタイム会話</span>
+                            </label>
+                        </div>
+                        
+                        <!-- テキスト入力エリア（テキストモード時） -->
+                        <div id="textInputArea" class="input-mode-area">
+                            <input type="text" id="chatMessageInput" placeholder="営業担当者の質問を入力..." onkeypress="handleChatKeyPress(event)">
+                            <button id="micButton" onclick="toggleVoiceRecording()" class="btn-mic" title="音声入力">
+                                <i class="fas fa-microphone"></i>
+                            </button>
+                            <span id="recordingTime" class="recording-time" style="display: none;">00:00</span>
+                            <button onclick="sendChatMessage()" class="btn-primary">送信</button>
+                        </div>
+                        
+                        <!-- リアルタイム会話エリア（リアルタイムモード時） -->
+                        <div id="realtimeInputArea" class="input-mode-area" style="display: none;">
+                            <button id="realtimeTalkButton" onclick="toggleRealtimeTalk()" class="btn-realtime-talk">
+                                <i class="fas fa-phone"></i>
+                                <span id="realtimeTalkText">会話を開始</span>
+                            </button>
+                            <span id="realtimeStatus" class="realtime-status">未接続</span>
+                        </div>
                     </div>
                     <div class="chat-actions">
                         <button onclick="finishSession()" class="btn-secondary">セッションを終了してスコアリング</button>
@@ -358,7 +382,9 @@
 
     <script src="logger.js"></script>
     <script src="log-viewer.js"></script>
+    <script src="realtime-client.js"></script>
     <script src="app.js"></script>
+    <script src="app-realtime.js"></script>
     
     <!-- Footer -->
     <footer class="footer" style="margin-top: 40px; padding: 20px; text-align: center; border-top: 1px solid #e0e0e0;">

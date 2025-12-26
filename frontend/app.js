@@ -11,6 +11,11 @@ let currentMode = localStorage.getItem('currentMode') || null; // 'simple' or 'd
 let currentCompanyId = null; // 取得した企業情報のIDを保持
 let currentCompanyInfo = null; // 取得した企業情報の内容を保存
 
+// リアルタイム会話関連
+let conversationMode = 'text'; // 'text' or 'realtime'
+let realtimeClient = null;
+let isRealtimeTalking = false;
+
 // ページロード時の処理
 window.onload = function() {
     // ロガーを初期化（logger.jsで自動的に初期化される）

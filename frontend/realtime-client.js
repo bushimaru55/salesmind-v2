@@ -13,6 +13,8 @@ class RealtimeClient {
         this.mediaStream = null;
         this.mediaRecorder = null;
         this.isRecording = false;
+        this.sessionConfigured = false;  // セッション設定済みフラグ
+        this.sessionReady = false;  // セッション準備完了フラグ
         
         // イベントハンドラー
         this.onConnected = null;
@@ -29,8 +31,11 @@ class RealtimeClient {
      */
     async connect() {
         try {
+            console.log('='.repeat(80));
+            console.log('🚀 Realtime API接続開始');
+            
             if (this.isConnected) {
-                console.warn('Already connected');
+                console.warn('⚠️ 既に接続済み');
                 return;
             }
             
@@ -43,13 +48,21 @@ class RealtimeClient {
                 wsUrl += `&session_id=${this.sessionId}`;
             }
             
-            console.log('Connecting to Realtime API...');
+            console.log('📍 接続情報:');
+            console.log('  - Protocol:', wsProtocol);
+            console.log('  - Host:', wsHost);
+            console.log('  - Token:', this.authToken.substring(0, 10) + '...');
+            console.log('  - Session:', this.sessionId);
+            console.log('  - URL:', wsUrl.replace(this.authToken, 'TOKEN'));
+            
             this._emitStatus('connecting');
             
             this.ws = new WebSocket(wsUrl);
             
             this.ws.onopen = () => {
-                console.log('WebSocket connected');
+                console.log('✅ WebSocket接続成功');
+                console.log('  - readyState:', this.ws.readyState);
+                console.log('  - protocol:', this.ws.protocol);
                 this.isConnected = true;
                 this._emitStatus('connected');
                 if (this.onConnected) {
@@ -58,8 +71,13 @@ class RealtimeClient {
             };
             
             this.ws.onclose = (event) => {
-                console.log('WebSocket closed:', event.code, event.reason);
+                console.log('🔌 WebSocket切断');
+                console.log('  - Code:', event.code);
+                console.log('  - Reason:', event.reason || '(理由なし)');
+                console.log('  - Clean:', event.wasClean);
                 this.isConnected = false;
+                this.sessionConfigured = false;  // フラグリセット
+                this.sessionReady = false;  // フラグリセット
                 this._emitStatus('disconnected');
                 if (this.onDisconnected) {
                     this.onDisconnected(event.code, event.reason);
@@ -67,8 +85,11 @@ class RealtimeClient {
             };
             
             this.ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                this._emitError('WebSocket connection error');
+                console.error('❌ WebSocketエラー');
+                console.error('  - Error:', error);
+                console.error('  - readyState:', this.ws.readyState);
+                console.error('  - URL:', wsUrl.replace(this.authToken, 'TOKEN'));
+                this._emitError(`WebSocket connection error: ${error.message || 'Unknown error'}`);
             };
             
             this.ws.onmessage = (event) => {
@@ -120,34 +141,55 @@ class RealtimeClient {
                 }
             });
             
-            // AudioContext初期化
+            // AudioContextでPCM16に変換
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
                 sampleRate: 24000
             });
             
-            // MediaRecorder設定
-            const options = {
-                mimeType: 'audio/webm;codecs=opus',
-                audioBitsPerSecond: 16000
-            };
+            const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+            this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
             
-            this.mediaRecorder = new MediaRecorder(this.mediaStream, options);
+            // 音声データ送信カウンター（デバッグ用）
+            this.audioChunkCount = 0;
+            this.lastLogTime = Date.now();
             
-            this.mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0 && this.isConnected) {
-                    // 音声データをOpenAIに送信
-                    this.ws.send(event.data);
+            this.processor.onaudioprocess = (e) => {
+                if (!this.isRecording || !this.isConnected) return;
+                
+                // セッション準備完了まで音声送信を待機
+                if (!this.sessionReady) {
+                    return;
+                }
+                
+                const inputData = e.inputBuffer.getChannelData(0);
+                // Float32からPCM16に変換
+                const pcm16 = this._float32ToPCM16(inputData);
+                
+                // WebSocketでバイナリデータとして送信
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(pcm16);
+                    this.audioChunkCount++;
+                    
+                    // 1秒ごとにログ出力
+                    const now = Date.now();
+                    if (now - this.lastLogTime >= 1000) {
+                        console.log(`🎤 音声送信中: ${this.audioChunkCount} chunks/sec (${pcm16.byteLength} bytes/chunk)`);
+                        this.audioChunkCount = 0;
+                        this.lastLogTime = now;
+                    }
+                } else {
+                    console.warn('⚠️ WebSocket未接続: readyState =', this.ws ? this.ws.readyState : 'null');
                 }
             };
             
-            // 100msごとに音声データを送信
-            this.mediaRecorder.start(100);
+            source.connect(this.processor);
+            this.processor.connect(this.audioContext.destination);
+            
             this.isRecording = true;
             
-            // セッション設定を送信
-            this._sendSessionConfig();
+            // セッション設定はsession.created受信後に送信するため、ここでは送信しない
             
-            console.log('Audio streaming started');
+            console.log('Audio streaming started with PCM16 format');
             
         } catch (error) {
             console.error('Failed to start audio stream:', error);
@@ -169,9 +211,11 @@ class RealtimeClient {
      * 音声キャプチャの停止
      */
     _stopAudioCapture() {
-        if (this.mediaRecorder && this.isRecording) {
-            this.mediaRecorder.stop();
-            this.mediaRecorder = null;
+        this.isRecording = false;
+        
+        if (this.processor) {
+            this.processor.disconnect();
+            this.processor = null;
         }
         
         if (this.mediaStream) {
@@ -179,26 +223,45 @@ class RealtimeClient {
             this.mediaStream = null;
         }
         
-        if (this.audioContext) {
+        if (this.audioContext && this.audioContext.state !== 'closed') {
             this.audioContext.close();
             this.audioContext = null;
         }
+    }
+    
+    /**
+     * Float32からPCM16に変換
+     */
+    _float32ToPCM16(float32Array) {
+        const buffer = new ArrayBuffer(float32Array.length * 2);
+        const view = new DataView(buffer);
         
-        this.isRecording = false;
+        for (let i = 0; i < float32Array.length; i++) {
+            // -1.0 ~ 1.0 の範囲にクリップ
+            const s = Math.max(-1, Math.min(1, float32Array[i]));
+            // Int16に変換 (-32768 ~ 32767)
+            const val = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            view.setInt16(i * 2, val, true); // little-endian
+        }
+        
+        return buffer;
     }
     
     /**
      * セッション設定を送信
      */
     _sendSessionConfig() {
-        if (!this.isConnected) return;
+        if (!this.isConnected) {
+            console.warn('⚠️ セッション設定送信スキップ: 未接続');
+            return;
+        }
         
         const config = {
             type: 'session.update',
             session: {
                 modalities: ['text', 'audio'],
                 instructions: 'あなたはAI営業顧客として、営業担当者と会話します。日本語で応答してください。',
-                voice: 'alloy',
+                voice: 'alloy',  // alloy, echo, shimmer から選択
                 input_audio_format: 'pcm16',
                 output_audio_format: 'pcm16',
                 input_audio_transcription: {
@@ -208,12 +271,21 @@ class RealtimeClient {
                     type: 'server_vad',
                     threshold: 0.5,
                     prefix_padding_ms: 300,
-                    silence_duration_ms: 500
-                }
+                    silence_duration_ms: 200
+                },
+                temperature: 0.8
             }
         };
         
-        this.ws.send(JSON.stringify(config));
+        console.log('📤 セッション設定送信:');
+        console.log(JSON.stringify(config, null, 2));
+        
+        try {
+            this.ws.send(JSON.stringify(config));
+            console.log('✅ セッション設定送信完了');
+        } catch (error) {
+            console.error('❌ セッション設定送信失敗:', error);
+        }
     }
     
     /**
@@ -223,12 +295,41 @@ class RealtimeClient {
         try {
             if (typeof event.data === 'string') {
                 const data = JSON.parse(event.data);
-                console.log('Received:', data.type);
+                const msgType = data.type;
                 
-                switch (data.type) {
+                console.log('📩 メッセージ受信:', msgType);
+                
+                switch (msgType) {
+                    case 'error':
+                        console.error('❌ OpenAIエラー:');
+                        console.error('  - Type:', data.error.type);
+                        console.error('  - Code:', data.error.code);
+                        console.error('  - Message:', data.error.message);
+                        console.error('  - Full:', JSON.stringify(data.error, null, 2));
+                        this._emitError(`OpenAI Error: ${data.error.message || JSON.stringify(data.error)}`);
+                        
+                        // エラー詳細をログに記録
+                        if (window.logger) {
+                            window.logger.error('OpenAI Realtime Error', data.error);
+                        }
+                        break;
+                    
                     case 'session.created':
+                        console.log('✅ セッション作成:', JSON.stringify(data.session, null, 2));
+                        // セッション作成後に設定を送信（1回のみ）
+                        if (!this.sessionConfigured) {
+                            this.sessionConfigured = true;
+                            this._sendSessionConfig();
+                        } else {
+                            console.warn('⚠️ セッション設定は既に送信済み');
+                        }
+                        break;
+                    
                     case 'session.updated':
-                        console.log('Session ready:', data);
+                        console.log('✅ セッション更新:', JSON.stringify(data.session, null, 2));
+                        // セッション更新完了 - 音声送信可能
+                        this.sessionReady = true;
+                        console.log('🎤 音声送信準備完了');
                         break;
                     
                     case 'conversation.item.input_audio_transcription.completed':

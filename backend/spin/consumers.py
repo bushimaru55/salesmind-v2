@@ -30,27 +30,38 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         """WebSocket接続時の処理"""
         try:
+            logger.info("=" * 80)
+            logger.info("WebSocket接続リクエスト受信")
+            
             # クエリパラメータから認証トークンを取得
             query_string = self.scope.get('query_string', b'').decode()
+            logger.info(f"Query string: {query_string[:100]}...")  # 最初の100文字のみ
+            
             params = dict(param.split('=') for param in query_string.split('&') if '=' in param)
             token_key = params.get('token')
             
             if not token_key:
-                logger.warning("No auth token provided in WebSocket connection")
+                logger.error("❌ 認証トークンが提供されていません")
                 await self.close(code=4001)
                 return
+            
+            logger.info(f"トークン確認: {token_key[:10]}...")
             
             # ユーザー認証
             self.user = await self.get_user_from_token(token_key)
             if not self.user:
-                logger.warning(f"Invalid token: {token_key}")
+                logger.error(f"❌ 無効なトークン: {token_key[:10]}...")
                 await self.close(code=4001)
                 return
             
             # セッションIDを取得（オプション）
             self.session_id = params.get('session_id')
             
-            logger.info(f"WebSocket connected: user={self.user.username}, session={self.session_id}")
+            logger.info(f"✅ WebSocket接続受け入れ: user={self.user.username}, session={self.session_id}")
+            
+            # セッションをrealtime_mode=Trueに更新
+            if self.session_id:
+                await self.update_session_realtime_mode(True)
             
             # クライアントとの接続を受け入れ
             await self.accept()
@@ -65,6 +76,10 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         """WebSocket切断時の処理"""
         logger.info(f"WebSocket disconnecting: user={self.user.username if self.user else 'Unknown'}, code={close_code}")
+        
+        # セッションをrealtime_mode=Falseに更新
+        if self.session_id:
+            await self.update_session_realtime_mode(False)
         
         # OpenAI WebSocketを切断
         if self.openai_ws:
@@ -86,13 +101,25 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         try:
             if text_data:
                 data = json.loads(text_data)
-                logger.debug(f"Received from client: {data.get('type', 'unknown')}")
+                logger.info(f"📨 クライアントからテキスト受信: type={data.get('type', 'unknown')}")
+                logger.debug(f"メッセージ内容: {text_data[:200]}...")
                 
                 # OpenAI Realtime APIにメッセージを転送
-                if self.openai_ws and self.openai_ws.open:
-                    await self.openai_ws.send(text_data)
+                if self.openai_ws:
+                    try:
+                        await self.openai_ws.send(text_data)
+                        logger.info(f"✅ OpenAIへテキスト転送成功")
+                    except Exception as e:
+                        logger.error(f"❌ OpenAIへのテキスト送信失敗: {e}", exc_info=True)
+                        await self.send(text_data=json.dumps({
+                            'type': 'error',
+                            'error': {
+                                'type': 'connection_error',
+                                'message': 'OpenAI Realtime API not connected'
+                            }
+                        }))
                 else:
-                    logger.warning("OpenAI WebSocket not connected")
+                    logger.warning("⚠️ OpenAI WebSocket未接続")
                     await self.send(text_data=json.dumps({
                         'type': 'error',
                         'error': {
@@ -103,8 +130,15 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             
             elif bytes_data:
                 # バイナリデータ（音声）の場合
-                if self.openai_ws and self.openai_ws.open:
-                    await self.openai_ws.send(bytes_data)
+                bytes_len = len(bytes_data)
+                logger.debug(f"🎤 クライアントから音声データ受信: {bytes_len} bytes")
+                
+                if self.openai_ws:
+                    try:
+                        await self.openai_ws.send(bytes_data)
+                        logger.debug(f"✅ OpenAIへ音声転送成功: {bytes_len} bytes")
+                    except Exception as e:
+                        logger.error(f"❌ OpenAIへの音声送信失敗: {e}", exc_info=True)
                     
         except Exception as e:
             logger.error(f"Error in receive: {e}", exc_info=True)
@@ -119,28 +153,42 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
     async def connect_to_openai(self):
         """OpenAI Realtime APIに接続"""
         try:
-            api_key = os.getenv('OPENAI_API_KEY')
+            logger.info("-" * 80)
+            logger.info("OpenAI Realtime API接続開始")
+            
+            # Django管理画面から登録されたAPIキーを取得
+            api_key = await self.get_openai_api_key()
             if not api_key:
+                logger.error("❌ OpenAI APIキーが設定されていません")
                 raise Exception("OPENAI_API_KEY not configured")
             
-            # OpenAI Realtime API WebSocketエンドポイント
-            openai_url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01"
+            logger.info(f"APIキー取得成功: {api_key[:10]}...{api_key[-4:]}")
             
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "OpenAI-Beta": "realtime=v1"
-            }
+            # OpenAI Realtime API WebSocketエンドポイント（GA版）
+            openai_url = "wss://api.openai.com/v1/realtime?model=gpt-realtime"
             
-            logger.info(f"Connecting to OpenAI Realtime API for user {self.user.username}")
+            # websocketsライブラリのバージョンに応じてヘッダーを設定
+            headers = [
+                ("Authorization", f"Bearer {api_key[:10]}..."),
+                ("OpenAI-Beta", "realtime=v1")
+            ]
+            
+            logger.info(f"接続先URL: {openai_url}")
+            logger.info(f"ユーザー: {self.user.username}")
+            logger.info("WebSocket接続試行中...")
             
             self.openai_ws = await websockets.connect(
                 openai_url,
-                extra_headers=headers,
+                additional_headers=[
+                    ("Authorization", f"Bearer {api_key}"),
+                    ("OpenAI-Beta", "realtime=v1")
+                ],
                 ping_interval=20,
                 ping_timeout=10
             )
             
-            logger.info(f"Connected to OpenAI Realtime API for user {self.user.username}")
+            logger.info(f"✅ OpenAI Realtime API接続成功 (user={self.user.username})")
+            logger.info(f"WebSocket state: {self.openai_ws.state}")
             
             # OpenAIからのメッセージをクライアントに転送するタスクを開始
             self.forwarding_task = asyncio.create_task(self.forward_openai_messages())
@@ -168,19 +216,32 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
     async def forward_openai_messages(self):
         """OpenAI Realtime APIからのメッセージをクライアントに転送"""
         try:
+            logger.info("📡 OpenAIメッセージ転送タスク開始")
+            
             async for message in self.openai_ws:
                 if isinstance(message, str):
                     # テキストメッセージ
                     data = json.loads(message)
-                    logger.debug(f"Received from OpenAI: {data.get('type', 'unknown')}")
+                    msg_type = data.get('type', 'unknown')
+                    logger.info(f"📩 OpenAIからメッセージ受信: type={msg_type}")
+                    
+                    # エラーメッセージは詳細ログ
+                    if msg_type == 'error':
+                        logger.error(f"❌ OpenAIエラー: {json.dumps(data, indent=2, ensure_ascii=False)}")
+                    else:
+                        logger.debug(f"メッセージ内容: {message[:300]}...")
+                    
                     await self.send(text_data=message)
+                    logger.debug(f"✅ クライアントへ転送完了")
                     
                     # セッション履歴に保存（必要に応じて）
                     await self.save_message_to_session(data)
                     
                 elif isinstance(message, bytes):
                     # バイナリメッセージ（音声）
+                    logger.debug(f"🔊 OpenAIから音声受信: {len(message)} bytes")
                     await self.send(bytes_data=message)
+                    logger.debug(f"✅ クライアントへ音声転送完了")
                     
         except websockets.exceptions.ConnectionClosed:
             logger.info("OpenAI WebSocket connection closed")
@@ -212,12 +273,50 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             logger.error(f"Error saving message to session: {e}", exc_info=True)
     
     @database_sync_to_async
+    def update_session_realtime_mode(self, is_realtime):
+        """セッションのリアルタイムモードを更新"""
+        try:
+            from .models import Session
+            session = Session.objects.get(id=self.session_id, user=self.user)
+            session.realtime_mode = is_realtime
+            session.save(update_fields=['realtime_mode'])
+            logger.info(f"✅ Session {self.session_id} realtime_mode updated to {is_realtime}")
+        except Session.DoesNotExist:
+            logger.warning(f"⚠️ Session {self.session_id} not found for user {self.user.username}")
+        except Exception as e:
+            logger.error(f"❌ Failed to update session realtime_mode: {e}", exc_info=True)
+    
+    @database_sync_to_async
     def get_user_from_token(self, token_key):
         """トークンからユーザーを取得"""
         try:
             token = Token.objects.select_related('user').get(key=token_key)
             return token.user
         except Token.DoesNotExist:
+            return None
+    
+    @database_sync_to_async
+    def get_openai_api_key(self):
+        """Django管理画面から登録されたOpenAI APIキーを取得"""
+        try:
+            from .models import AIProviderKey
+            
+            # AIProviderKeyテーブルからOpenAI APIキーを取得
+            # 優先順位: 1) デフォルトキー, 2) 最初の有効なキー
+            api_key_obj = AIProviderKey.objects.filter(
+                provider='openai',
+                is_active=True
+            ).order_by('-is_default', '-created_at').first()
+            
+            if api_key_obj:
+                logger.info(f"OpenAI APIキーを取得しました: {api_key_obj.name}")
+                return api_key_obj.api_key
+            else:
+                logger.error("OpenAI APIキーが見つかりません。Django管理画面（API統合管理）から登録してください。")
+                return None
+            
+        except Exception as e:
+            logger.error(f"APIキー取得エラー: {e}", exc_info=True)
             return None
     
     @database_sync_to_async

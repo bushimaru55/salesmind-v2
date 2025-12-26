@@ -50,9 +50,7 @@ python manage.py migrate --noinput
 echo "Collecting static files..."
 python manage.py collectstatic --noinput || true
 
-# gunicornで起動
-echo "Starting gunicorn..."
-exec gunicorn salesmind.wsgi:application \
-    --config gunicorn.conf.py \
-    --bind 0.0.0.0:${PORT:-8000}
+# DaphneでASGIサーバーを起動（WebSocket対応）
+echo "Starting Daphne ASGI server..."
+exec daphne -b 0.0.0.0 -p ${PORT:-8000} salesmind.asgi:application
 
