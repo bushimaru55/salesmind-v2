@@ -1,0 +1,167 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    margin: 0;
+}
+
+.register-container {
+    width: 100%;
+    max-width: 600px;
+}
+
+.register-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+.register-header {
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
+    color: white;
+    padding: 30px;
+    text-align: center;
+}
+
+.register-header h1 {
+    font-size: 2.5em;
+    margin: 0 0 10px 0;
+}
+
+.subtitle {
+    font-size: 1.1em;
+    opacity: 0.9;
+    margin: 0;
+}
+
+.register-form {
+    padding: 40px;
+}
+
+.register-form h2 {
+    color: #132131;
+    margin: 0 0 30px 0;
+    font-size: 1.8em;
+}
+
+.form-section {
+    margin-bottom: 30px;
+}
+
+.form-section h3 {
+    color: #667eea;
+    font-size: 1.2em;
+    margin: 0 0 20px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #667eea;
+}
+
+.optional-section {
+    background: #f9f9f9;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.optional-section h3 {
+    color: #666;
+    border-bottom-color: #ddd;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #333;
+}
+
+.required {
+    color: #e74c3c;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.3s;
+    box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.form-group small {
+    display: block;
+    margin-top: 5px;
+    color: #666;
+    font-size: 0.85em;
+}
+
+.btn-register {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-top: 20px;
+}
+
+.btn-register:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.error-message {
+    background: #fee;
+    color: #c33;
+    padding: 12px;
+    border-radius: 6px;
+    margin-top: 15px;
+    border-left: 4px solid #c33;
+}
+
+.success-message {
+    background: #efe;
+    color: #3c3;
+    padding: 12px;
+    border-radius: 6px;
+    margin-top: 15px;
+    border-left: 4px solid #3c3;
+}
+
+.login-link {
+    text-align: center;
+    padding: 20px;
+    background: #f5f5f5;
+    color: #666;
+}
+
+.login-link a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.login-link a:hover {
+    text-decoration: underline;
+}
+

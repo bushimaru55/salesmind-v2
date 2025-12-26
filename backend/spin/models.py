@@ -567,6 +567,56 @@ class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     email_verified = models.BooleanField(default=False, help_text="メールアドレスの認証状況")
     email_verified_at = models.DateTimeField(null=True, blank=True, help_text="メール認証完了日時")
+    
+    # マーケティング情報
+    industry = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        choices=[
+            ('real_estate', '不動産（売買・賃貸）'),
+            ('insurance', '保険（生保・損保）'),
+            ('it_saas', 'IT・SaaS'),
+            ('hr', '人材（派遣・紹介）'),
+            ('advertising', '広告・マーケティング'),
+            ('automotive', '自動車（販売・リース）'),
+            ('finance', '金融（銀行・証券）'),
+            ('manufacturing', '製造業'),
+            ('retail', '小売・EC'),
+            ('telecom', '通信'),
+            ('other', 'その他'),
+        ],
+        help_text="業種"
+    )
+    
+    sales_experience = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        choices=[
+            ('less_than_1', '1年未満'),
+            ('1_to_3', '1〜3年'),
+            ('3_to_5', '3〜5年'),
+            ('5_plus', '5年以上'),
+        ],
+        help_text="営業経験年数"
+    )
+    
+    usage_purpose = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        choices=[
+            ('improve_skills', '商談スキルを向上させたい'),
+            ('proposal', '提案力を強化したい'),
+            ('questioning', '質問力を磨きたい'),
+            ('interview', '面接・転職対策'),
+            ('team_training', 'チームの育成に使いたい'),
+            ('other', 'その他'),
+        ],
+        help_text="利用目的"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

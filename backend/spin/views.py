@@ -75,8 +75,11 @@ def register_user(request):
     from .email_service import send_verification_email
     
     username = request.data.get('username')
-    email = request.data.get('email')
+    email = request.data.get('email')  # 必須化
     password = request.data.get('password')
+    industry = request.data.get('industry')  # 新規
+    sales_experience = request.data.get('sales_experience')  # 新規（任意）
+    usage_purpose = request.data.get('usage_purpose')  # 新規（任意）
     
     # バリデーション
     errors = {}
@@ -85,21 +88,22 @@ def register_user(request):
     elif User.objects.filter(username=username).exists():
         errors['username'] = ["このユーザー名は既に使用されています"]
     
-    # メールアドレスは任意（空文字列や空白の場合はNoneにする）
-    email = email.strip() if email else ''
-    if email and not '@' in email:
+    # メールアドレスは必須
+    if not email or not email.strip():
+        errors['email'] = ["メールアドレスは必須です"]
+    elif not '@' in email:
         errors['email'] = ["有効なメールアドレスを入力してください"]
-    elif email and User.objects.filter(email=email).exists():
+    elif User.objects.filter(email=email).exists():
         errors['email'] = ["このメールアドレスは既に使用されています"]
-    
-    # メールアドレスが空の場合はNoneに設定
-    if not email:
-        email = None
     
     if not password:
         errors['password'] = ["パスワードは必須です"]
     elif len(password) < 6:
         errors['password'] = ["パスワードは6文字以上で入力してください"]
+    
+    # 業種は必須
+    if not industry or not industry.strip():
+        errors['industry'] = ["業種は必須です"]
     
     if errors:
         return Response({
@@ -108,82 +112,50 @@ def register_user(request):
         }, status=status.HTTP_400_BAD_REQUEST)
     
     try:
-        # メールアドレスがある場合とない場合で処理を分ける
-        has_email = email is not None and email.strip()
+        expires_at = timezone.now() + timedelta(hours=settings.EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS)
         
-        if has_email:
-            # メールアドレスがある場合：メール認証が必要
-            expires_at = timezone.now() + timedelta(hours=settings.EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS)
-            
-            # ユーザーを作成（is_active=Falseで一時的に無効化）
-            user = User.objects.create_user(
-                username=username,
-                email=email,
-                password=password,
-                is_active=False  # メール認証が完了するまで無効化（ログイン不可）
-            )
-            
-            # プロファイルを作成（email_verified=Falseで初期化）
-            profile, _ = UserProfile.objects.get_or_create(user=user)
-            profile.email_verified = False  # 明示的にFalseに設定
-            profile.save()
-            
-            # メール認証トークンを生成
-            verification_token = EmailVerificationToken.objects.create(
-                user=user,
-                expires_at=expires_at
-            )
-            
-            # メールを送信
-            email_sent = send_verification_email(user, verification_token)
-            
-            if not email_sent:
-                # メール送信に失敗した場合、ユーザーを完全に削除
-                user.delete()
-                logger.warning(f"User registration failed: email send failed for {username}")
-                return Response({
-                    "error": "メール送信に失敗しました",
-                    "message": "メールアドレスが正しいか確認してください。ユーザーは登録されていません。"
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
-            logger.info(f"User registration initiated (pending email verification): {username}, email sent to {email}")
-            
+        # ユーザーを作成（is_active=Falseで一時的に無効化）
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            is_active=False
+        )
+        
+        # プロファイルを作成（追加情報を含む）
+        profile = UserProfile.objects.create(
+            user=user,
+            email_verified=False,
+            industry=industry,
+            sales_experience=sales_experience if sales_experience else None,
+            usage_purpose=usage_purpose if usage_purpose else None,
+        )
+        
+        # メール認証トークンを生成
+        verification_token = EmailVerificationToken.objects.create(
+            user=user,
+            expires_at=expires_at
+        )
+        
+        # メールを送信
+        email_sent = send_verification_email(user, verification_token)
+        
+        if not email_sent:
+            user.delete()
+            logger.warning(f"User registration failed: email send failed for {username}")
             return Response({
-                "message": "ユーザー登録を受け付けました。メールアドレスに認証リンクを送信しました。メールを確認して認証を完了してください。認証が完了するまでログインできません。",
-                "user": {
-                    "id": user.id,
-                    "username": user.username,
-                    "email": user.email
-                },
-                "email_sent": True,
-                "email_verification_required": True
-            }, status=status.HTTP_201_CREATED)
-        else:
-            # メールアドレスがない場合：メール認証をスキップして即座に有効化
-            user = User.objects.create_user(
-                username=username,
-                email='',  # 空文字列
-                password=password,
-                is_active=True  # メール認証不要なので即座に有効化
-            )
-            
-            # プロファイルを作成（メールがないのでemail_verifiedはTrueとする）
-            profile, _ = UserProfile.objects.get_or_create(user=user)
-            profile.email_verified = True  # メールがない場合は認証済みとして扱う
-            profile.save()
-            
-            logger.info(f"User registration completed (no email): {username}")
-            
-            return Response({
-                "message": "ユーザー登録が完了しました。ログインできます。",
-                "user": {
-                    "id": user.id,
-                    "username": user.username,
-                    "email": user.email or None
-                },
-                "email_sent": False,
-                "email_verification_required": False
-            }, status=status.HTTP_201_CREATED)
+                "error": "メール送信に失敗しました",
+                "message": "メールアドレスが正しいか確認してください。ユーザーは登録されていません。"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        logger.info(f"User registration initiated: {username}, industry: {industry}, email sent to {email}")
+        
+        return Response({
+            "message": "登録が完了しました。メールを確認して認証を完了してください。",
+            "username": username,
+            "email": email,
+            "email_verification_required": True
+        }, status=status.HTTP_201_CREATED)
         
     except Exception as e:
         logger.error(f"User registration failed: {e}", exc_info=True)
@@ -290,26 +262,34 @@ def verify_email(request):
     """メール認証エンドポイント"""
     from django.conf import settings
     from django.utils import timezone
+    from django.shortcuts import redirect
     from .models import UserProfile, EmailVerificationToken
+    from urllib.parse import urlencode
     
     token_str = request.query_params.get('token')
     
+    # エラー時のリダイレクトURL
+    def redirect_error(error_msg, error_detail):
+        params = urlencode({'error': error_msg, 'message': error_detail})
+        return redirect(f'/email_verification_error.html?{params}')
+    
     if not token_str:
-        return Response({
-            "error": "トークンが指定されていません",
-            "message": "認証リンクが正しくありません"
-        }, status=status.HTTP_400_BAD_REQUEST)
+        return redirect_error("no_token", "認証リンクが正しくありません")
     
     try:
+        # トークンのUUID形式をバリデーション
+        import uuid
+        try:
+            uuid.UUID(token_str)
+        except ValueError:
+            return redirect_error("invalid_format", "認証リンクの形式が正しくありません")
+        
         # トークンを取得
         verification_token = EmailVerificationToken.objects.get(token=token_str)
         
         # トークンの有効性をチェック
         if not verification_token.is_valid():
-            return Response({
-                "error": "無効なトークンです",
-                "message": "この認証リンクは期限切れか、既に使用されています"
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return redirect_error("expired", "この認証リンクは期限切れか、既に使用されています")
         
         user = verification_token.user
         
@@ -332,26 +312,14 @@ def verify_email(request):
         
         logger.info(f"Email verified for user {user.username}")
         
-        return Response({
-            "message": "メールアドレスの認証が完了しました。ログインできるようになりました。",
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email
-            }
-        }, status=status.HTTP_200_OK)
+        # 成功時はHTMLページにリダイレクト
+        return redirect('/email_verified.html')
         
     except EmailVerificationToken.DoesNotExist:
-        return Response({
-            "error": "無効なトークンです",
-            "message": "認証リンクが見つかりません"
-        }, status=status.HTTP_404_NOT_FOUND)
+        return redirect_error("not_found", "認証リンクが見つかりません")
     except Exception as e:
         logger.error(f"Email verification failed: {e}", exc_info=True)
-        return Response({
-            "error": "メール認証に失敗しました",
-            "message": str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return redirect_error("server_error", f"メール認証に失敗しました: {str(e)}")
 
 
 @api_view(['POST'])

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新規登録 - SalesMind</title>
+    <!-- キャッシュ制御 -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <link rel="stylesheet" href="register.css">
+</head>
+<body>
+    <div class="register-container">
+        <div class="register-card">
+            <div class="register-header">
+                <h1>🧠 SalesMind</h1>
+                <p class="subtitle">AI営業思考トレーナー</p>
+            </div>
+            
+            <form id="registerForm" class="register-form">
+                <h2>新規登録</h2>
+                
+                <!-- 基本情報 -->
+                <div class="form-section">
+                    <h3>基本情報</h3>
+                    
+                    <div class="form-group">
+                        <label for="username">ユーザー名 <span class="required">*</span></label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email">メールアドレス <span class="required">*</span></label>
+                        <input type="email" id="email" name="email" required>
+                        <small>登録後、認証メールが送信されます</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password">パスワード <span class="required">*</span></label>
+                        <input type="password" id="password" name="password" required minlength="6">
+                        <small>6文字以上</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="industry">あなたの業種 <span class="required">*</span></label>
+                        <select id="industry" name="industry" required>
+                            <option value="">選択してください</option>
+                            <option value="real_estate">不動産（売買・賃貸）</option>
+                            <option value="insurance">保険（生保・損保）</option>
+                            <option value="it_saas">IT・SaaS</option>
+                            <option value="hr">人材（派遣・紹介）</option>
+                            <option value="advertising">広告・マーケティング</option>
+                            <option value="automotive">自動車（販売・リース）</option>
+                            <option value="finance">金融（銀行・証券）</option>
+                            <option value="manufacturing">製造業</option>
+                            <option value="retail">小売・EC</option>
+                            <option value="telecom">通信</option>
+                            <option value="other">その他</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- 追加情報（任意） -->
+                <div class="form-section optional-section">
+                    <h3>より良い体験のために（任意）</h3>
+                    
+                    <div class="form-group">
+                        <label for="sales_experience">営業経験年数</label>
+                        <select id="sales_experience" name="sales_experience">
+                            <option value="">選択（スキップ可）</option>
+                            <option value="less_than_1">1年未満</option>
+                            <option value="1_to_3">1〜3年</option>
+                            <option value="3_to_5">3〜5年</option>
+                            <option value="5_plus">5年以上</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="usage_purpose">利用目的</label>
+                        <select id="usage_purpose" name="usage_purpose">
+                            <option value="">選択（スキップ可）</option>
+                            <option value="improve_skills">商談スキルを向上させたい</option>
+                            <option value="proposal">提案力を強化したい</option>
+                            <option value="questioning">質問力を磨きたい</option>
+                            <option value="interview">面接・転職対策</option>
+                            <option value="team_training">チームの育成に使いたい</option>
+                            <option value="other">その他</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn-register">登録してメール認証へ</button>
+                
+                <div id="error" class="error-message" style="display: none;"></div>
+                <div id="success" class="success-message" style="display: none;"></div>
+            </form>
+            
+            <div class="login-link">
+                既にアカウントをお持ちの方は <a href="index.html">ログイン</a>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Tauri警告を抑制（ブラウザで実行する場合）
+        if (typeof window !== 'undefined' && !window.__TAURI_METADATA__) {
+            const originalError = console.error;
+            console.error = function(...args) {
+                const message = args[0]?.toString() || '';
+                if (message.includes('__TAURI_METADATA__') || message.includes('appWindow')) {
+                    return; // Tauri関連の警告を無視
+                }
+                originalError.apply(console, args);
+            };
+        }
+    </script>
+    <script src="register.js"></script>
+</body>
+</html>
+

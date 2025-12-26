@@ -70,26 +70,15 @@
             <h1>🧠 SalesMind</h1>
             <p class="subtitle">AI営業思考トレーナー - SPINメソッドで商談スキルを向上</p>
             <div class="auth-section">
-                <div id="authTabs" class="auth-tabs">
-                    <button class="tab-button active" onclick="showLoginTab()">ログイン</button>
-                    <button class="tab-button" onclick="showRegisterTab()">新規登録</button>
-                </div>
                 <div id="loginForm" class="auth-form">
                     <h3>ログイン</h3>
                     <input type="text" id="loginUsername" placeholder="ユーザー名">
                     <input type="password" id="loginPassword" placeholder="パスワード">
                     <button onclick="login()">ログイン</button>
                     <div id="loginError" class="error-message" style="display: none;"></div>
-                </div>
-                <div id="registerForm" class="auth-form" style="display: none;">
-                    <h3>新規登録</h3>
-                    <input type="text" id="registerUsername" placeholder="ユーザー名" required>
-                    <input type="email" id="registerEmail" placeholder="メールアドレス（任意）">
-                    <input type="password" id="registerPassword" placeholder="パスワード（6文字以上）" required>
-                    <p style="font-size: 0.85rem; color: #666; margin: 10px 0;">メールアドレスを入力した場合、登録後に認証リンクを送信します</p>
-                    <button onclick="register()">登録</button>
-                    <div id="registerError" class="error-message" style="display: none;"></div>
-                    <div id="registerSuccess" class="success-message" style="display: none;"></div>
+                    <div class="register-link">
+                        <a href="register.html" class="btn-register-link">新規登録はこちら</a>
+                    </div>
                 </div>
                 <div id="userInfo" class="user-info" style="display: none;">
                     <span>ようこそ、<strong id="usernameDisplay"></strong>さん</span>

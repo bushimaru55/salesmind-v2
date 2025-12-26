@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>認証エラー - SalesMind</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            margin: 0;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .error-icon {
+            font-size: 80px;
+            color: #dc3545;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #132131;
+            margin-bottom: 20px;
+        }
+        
+        .error-message {
+            background: #fee;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+            border-radius: 4px;
+        }
+        
+        .error-message h3 {
+            margin: 0 0 10px 0;
+            color: #dc3545;
+        }
+        
+        .error-message p {
+            margin: 0;
+            color: #666;
+        }
+        
+        p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+            transition: transform 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .help-text {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 14px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="error-icon">⚠️</div>
+        <h1>認証に失敗しました</h1>
+        
+        <div class="error-message">
+            <h3>エラー内容</h3>
+            <p id="error-detail">認証リンクが無効または期限切れです。</p>
+        </div>
+        
+        <p>
+            認証リンクは24時間で期限切れになります。<br>
+            新しい認証メールをリクエストしてください。
+        </p>
+        
+        <div class="btn-group">
+            <a href="register.html" class="btn btn-primary">新規登録</a>
+            <a href="index.html" class="btn btn-secondary">ログイン</a>
+        </div>
+        
+        <div class="help-text">
+            お困りの場合は、サポートまでお問い合わせください。
+        </div>
+    </div>
+    
+    <script>
+        // URLパラメータからエラーメッセージを取得
+        const urlParams = new URLSearchParams(window.location.search);
+        const errorMsg = urlParams.get('error');
+        const errorDetail = urlParams.get('message');
+        
+        if (errorDetail) {
+            document.getElementById('error-detail').textContent = errorDetail;
+        }
+    </script>
+</body>
+</html>
+
