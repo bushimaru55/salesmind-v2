@@ -37,5 +37,9 @@ urlpatterns = [
 
     # 音声変換
     path('speech/transcribe/', views.transcribe_speech, name='transcribe_speech'),
+
+    # Text-to-Speech
+    path('tts/generate/', views.generate_tts, name='generate_tts'),
+    path('tts/voices/', views.get_tts_voices, name='get_tts_voices'),
 ]
 

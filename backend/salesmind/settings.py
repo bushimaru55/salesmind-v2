@@ -264,6 +264,9 @@ STATICFILES_DIRS = [
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Google Analytics Data API設定
+GA_PROPERTY_ID = os.getenv('GA_PROPERTY_ID', '')
+
 # Logging configuration
 LOGGING = {
     "version": 1,

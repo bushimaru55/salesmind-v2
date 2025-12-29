@@ -25,3 +25,4 @@ print(f'総プロファイル数: {UserProfile.objects.count()}')
 
 
 
+

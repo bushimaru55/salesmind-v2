@@ -6,3 +6,4 @@ class EmailManagementConfig(AppConfig):
     name = 'email_management'
     verbose_name = 'メールアドレス管理'
 
+

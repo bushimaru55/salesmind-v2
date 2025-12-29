@@ -12,7 +12,8 @@ services:
       - .env
     environment:
       # Docker環境ではコンテナ内のパスを使用
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/salesmind-481802-2edf66e5244d.json
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/salesmind-481505-68724d59445a.json
+      - GA_PROPERTY_ID=517779199
     depends_on:
       - db
     networks:

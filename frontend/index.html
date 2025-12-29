@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-HDWNL6YVKF"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-HDWNL6YVKF');
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SalesMind - AI営業思考トレーナー</title>
@@ -173,6 +181,27 @@
                     <label>顧客像（オプション）</label>
                     <input type="text" id="detailed_customer_persona" placeholder="例: 中堅IT企業のCTO" value="">
                 </div>
+                
+                <!-- 音声設定セクション -->
+                <div class="form-group voice-settings">
+                    <label>🔊 AI顧客の音声設定</label>
+                    <div class="voice-options">
+                        <select id="voiceSelect" onchange="setVoice(this.value)">
+                            <option value="auto">自動（ペルソナから判定）</option>
+                            <option value="nova">Nova（女性・明るい）</option>
+                            <option value="shimmer">Shimmer（女性・柔らかい）</option>
+                            <option value="onyx">Onyx（男性・権威的）</option>
+                            <option value="echo">Echo（男性・落ち着き）</option>
+                            <option value="alloy">Alloy（中性的）</option>
+                        </select>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="autoPlayVoice" onchange="setAutoPlayVoice(this.checked)">
+                            応答を自動再生
+                        </label>
+                    </div>
+                    <small class="form-help">チャット中に顧客の応答を音声で確認できます</small>
+                </div>
+                
                 <button onclick="fetchCompanyInfo()" class="btn-primary">企業情報を取得</button>
                 <div id="companyInfoResult" class="result-box" style="display: none;">
                     <!-- 企業情報がここに表示される -->

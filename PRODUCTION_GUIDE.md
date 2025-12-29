@@ -291,3 +291,4 @@ docker compose logs > logs_$(date +%Y%m%d_%H%M%S).txt
 docker compose exec web python manage.py check --database default
 ```
 
+

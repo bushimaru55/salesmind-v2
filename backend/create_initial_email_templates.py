@@ -79,3 +79,4 @@ else:
 print("\n=== 初期データの作成完了 ===")
 print(f"登録済みテンプレート数: {EmailTemplate.objects.count()}")
 
+

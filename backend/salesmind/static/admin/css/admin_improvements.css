@@ -1,186 +1,186 @@
-/* Django管理画面の可読性向上 - 最小限の調整 */
+/* Django管理画面の可読性向上 - SalesMind カスタムスタイル */
 
 /* ====================================
    上部ヘッダーとタイトル
    ==================================== */
 h1 {
-    color: #212529 !important;
-    font-weight: 600 !important;
+    color: #212529;
+    font-weight: 600;
 }
 
 #content h1 {
-    color: #212529 !important;
-    font-weight: 600 !important;
-    font-size: 24px !important;
+    color: #212529;
+    font-weight: 600;
+    font-size: 24px;
 }
 
 /* ページタイトルバー（changelist-headerなど） */
 .changelist-header,
 .object-tools,
 .submit-row {
-    background: #f8f9fa !important;
-    border-bottom: 1px solid #dee2e6 !important;
-    padding: 16px 20px !important;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    padding: 16px 20px;
 }
 
 .changelist-header h1,
 .changelist-header h2 {
-    color: #212529 !important;
-    font-weight: 600 !important;
-    margin: 0 !important;
+    color: #212529;
+    font-weight: 600;
+    margin: 0;
 }
 
 /* ====================================
    情報バナーとメッセージ
    ==================================== */
 .messagelist {
-    margin-bottom: 20px !important;
+    margin-bottom: 20px;
 }
 
 .messagelist li {
-    padding: 12px 16px !important;
-    margin-bottom: 8px !important;
-    border-radius: 4px !important;
-    font-weight: 500 !important;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    font-weight: 500;
 }
 
 .messagelist li.info {
-    background: #d1ecf1 !important;
-    color: #0c5460 !important;
-    border: 1px solid #bee5eb !important;
+    background: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
 }
 
 .messagelist li.success {
-    background: #d4edda !important;
-    color: #155724 !important;
-    border: 1px solid #c3e6cb !important;
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
 }
 
 .messagelist li.warning {
-    background: #fff3cd !important;
-    color: #856404 !important;
-    border: 1px solid #ffeaa7 !important;
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
 }
 
 .messagelist li.error {
-    background: #f8d7da !important;
-    color: #721c24 !important;
-    border: 1px solid #f5c6cb !important;
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
 }
 
-/* システムメッセージ（上部の黄色いバナーなど） */
+/* システムメッセージ */
 .system-message,
 .help-block,
 .help {
-    color: #495057 !important;
-    background: #fff3cd !important;
-    border: 1px solid #ffeaa7 !important;
-    padding: 12px 16px !important;
-    border-radius: 4px !important;
-    margin-bottom: 16px !important;
+    color: #495057;
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 16px;
 }
 
 .system-message p,
 .help-block p,
 .help p {
-    color: #856404 !important;
-    font-weight: 500 !important;
-    margin: 0 !important;
+    color: #856404;
+    font-weight: 500;
+    margin: 0;
 }
 
 /* ====================================
    検索バーとアクションバー
    ==================================== */
 #changelist-search {
-    background: #ffffff !important;
-    border: 1px solid #ced4da !important;
-    color: #212529 !important;
-    padding: 8px 12px !important;
-    font-size: 14px !important;
+    background: #ffffff;
+    border: 1px solid #ced4da;
+    color: #212529;
+    padding: 8px 12px;
+    font-size: 14px;
 }
 
 #changelist-search:focus {
-    border-color: #417690 !important;
-    outline: none !important;
-    box-shadow: 0 0 0 2px rgba(65, 118, 144, 0.25) !important;
+    border-color: #417690;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(65, 118, 144, 0.25);
 }
 
 #changelist-search::placeholder {
-    color: #6c757d !important;
-    opacity: 0.8 !important;
+    color: #6c757d;
+    opacity: 0.8;
 }
 
 /* アクションバー */
 .actions {
-    background: #ffffff !important;
-    border: 1px solid #dee2e6 !important;
-    padding: 12px 16px !important;
-    margin-bottom: 16px !important;
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    padding: 12px 16px;
+    margin-bottom: 16px;
 }
 
 .actions label,
 .actions select {
-    color: #212529 !important;
-    font-weight: 500 !important;
+    color: #212529;
+    font-weight: 500;
 }
 
 .actions select {
-    background: #ffffff !important;
-    border: 1px solid #ced4da !important;
-    color: #212529 !important;
-    padding: 6px 10px !important;
+    background: #ffffff;
+    border: 1px solid #ced4da;
+    color: #212529;
+    padding: 6px 10px;
 }
 
 /* ====================================
    テーブルヘッダー
    ==================================== */
 #result_list thead th {
-    background: #f8f9fa !important;
-    color: #212529 !important;
-    font-weight: 600 !important;
-    border-bottom: 2px solid #dee2e6 !important;
-    padding: 12px !important;
+    background: #f8f9fa;
+    color: #212529;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+    padding: 12px;
 }
 
 /* ====================================
    フィルターパネル（右側）
    ==================================== */
 #changelist-filter {
-    background: #f8f9fa !important;
+    background: #f8f9fa;
 }
 
 #changelist-filter h2 {
-    background: #417690 !important;
-    color: #ffffff !important;
-    font-weight: 600 !important;
-    padding: 12px 16px !important;
+    background: #417690;
+    color: #ffffff;
+    font-weight: 600;
+    padding: 12px 16px;
 }
 
 #changelist-filter h3 {
-    color: #212529 !important;
-    font-weight: 600 !important;
-    margin-top: 16px !important;
-    margin-bottom: 8px !important;
-    padding: 0 16px !important;
+    color: #212529;
+    font-weight: 600;
+    margin-top: 16px;
+    margin-bottom: 8px;
+    padding: 0 16px;
 }
 
 #changelist-filter li {
-    padding: 6px 16px !important;
+    padding: 6px 16px;
 }
 
 #changelist-filter a {
-    color: #417690 !important;
-    text-decoration: none !important;
+    color: #417690;
+    text-decoration: none;
 }
 
 #changelist-filter li.selected a {
-    color: #212529 !important;
-    font-weight: 600 !important;
+    color: #212529;
+    font-weight: 600;
 }
 
 #changelist-filter a:hover {
-    color: #205067 !important;
-    text-decoration: underline !important;
+    color: #205067;
+    text-decoration: underline;
 }
 
 /* ====================================
@@ -189,56 +189,194 @@ h1 {
 .button,
 input[type="submit"],
 .addlink {
-    background: #417690 !important;
-    color: #ffffff !important;
-    border: none !important;
-    padding: 10px 20px !important;
-    font-weight: 500 !important;
-    border-radius: 4px !important;
+    background: #417690;
+    color: #ffffff;
+    border: none;
+    padding: 10px 20px;
+    font-weight: 500;
+    border-radius: 4px;
 }
 
 .button:hover,
 input[type="submit"]:hover,
 .addlink:hover {
-    background: #205067 !important;
-    color: #ffffff !important;
+    background: #205067;
+    color: #ffffff;
 }
 
 /* ====================================
-   全体的なテキスト可読性向上
+   SalesMind カスタムクラス
+   管理画面のformat_html内で使用
    ==================================== */
-body {
-    color: #212529 !important;
+
+/* スコア表示 */
+.score-high {
+    color: #28a745;
+    font-weight: bold;
 }
 
-#content {
-    color: #212529 !important;
+.score-medium {
+    color: #ffc107;
+    font-weight: bold;
 }
 
-#content p,
-#content div,
-#content span {
-    color: #212529 !important;
+.score-low {
+    color: #dc3545;
+    font-weight: bold;
 }
 
-/* リンク */
-a {
-    color: #417690 !important;
+/* ステータスバッジ */
+.status-active,
+.status-verified {
+    color: #28a745;
 }
 
-a:hover {
-    color: #205067 !important;
+.status-inactive,
+.status-unverified {
+    color: #dc3545;
+}
+
+.status-pending {
+    color: #ffc107;
+}
+
+/* APIキー表示 */
+.api-key-masked {
+    background: #f5f5f5;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-family: monospace;
+}
+
+/* 推奨バッジ */
+.badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    margin-right: 4px;
+}
+
+.badge-spin {
+    background: #417690;
+    color: white;
+}
+
+.badge-chat {
+    background: #28a745;
+    color: white;
+}
+
+.badge-scoring {
+    background: #ffc107;
+    color: #333;
+}
+
+.badge-analysis {
+    background: #17a2b8;
+    color: white;
+}
+
+/* プロバイダーアイコン */
+.provider-icon {
+    margin-right: 4px;
+}
+
+/* スコアテーブル */
+.score-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.score-table th,
+.score-table td {
+    padding: 8px;
+    border: 1px solid #ddd;
+}
+
+.score-table th {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+
+/* 情報ボックス */
+.info-box {
+    background: #e7f3ff;
+    border-left: 4px solid #2196F3;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.info-box h4 {
+    margin: 0 0 10px 0;
+    color: #417690;
+    font-size: 14px;
+}
+
+/* テストセクション */
+.test-section {
+    margin-top: 20px;
+    padding: 20px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.test-section h3 {
+    margin-top: 0;
+    color: #333;
+}
+
+/* 結果表示 */
+.result-success {
+    padding: 10px;
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+    border-radius: 4px;
+}
+
+.result-error {
+    padding: 10px;
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+}
+
+.result-loading {
+    padding: 10px;
+    background: #f0f0f0;
+    border-radius: 4px;
 }
 
 /* ====================================
-   Macのダークモード対応
+   外部ツールメニュー
+   ==================================== */
+.app-external_tools {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.app-external_tools table caption a,
+.app-external_tools table caption span {
+    color: white !important;
+}
+
+.app-external_tools th a {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.app-external_tools th a:hover {
+    color: white !important;
+}
+
+/* ====================================
+   ダークモード対応（必要な場合のみ!important使用）
    ==================================== */
 @media (prefers-color-scheme: dark) {
-    body {
-        background-color: #ffffff !important;
-        color: #212529 !important;
-    }
-    
+    body,
     #content {
         background-color: #ffffff !important;
         color: #212529 !important;
@@ -250,19 +388,4 @@ a:hover {
     .changelist-header h2 {
         color: #212529 !important;
     }
-    
-    .messagelist li,
-    .system-message,
-    .help-block,
-    .help {
-        color: #212529 !important;
-    }
-    
-    .actions,
-    #changelist-search,
-    .actions select {
-        background: #ffffff !important;
-        color: #212529 !important;
-    }
 }
-

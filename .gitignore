@@ -68,6 +68,8 @@ coverage.xml
 # GCP Service Account Keys (Security)
 # 特定のGCPサービスアカウントキーファイルパターンのみを除外
 # GCPサービスアカウントキーは通常「project-id-xxxxxxxxxxxxx.json」の形式
+salesmind-*.json
+*-*-*-*.json
 backend/salesmind-*.json
 backend/*-*-*-*.json
 

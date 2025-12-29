@@ -429,3 +429,4 @@ docker compose logs -n 100 mailserver | grep -E "smtp|gmail|relay|sent|delivered
 - `backend/salesmind/settings.py`: Django設定（メール設定含む）
 
 
+

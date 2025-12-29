@@ -1,0 +1,15 @@
+{% extends "admin/index.html" %}
+{% load i18n static %}
+
+{% block content %}
+<div id="welcome-panel" style="margin-bottom: 20px; background: linear-gradient(135deg, #417690 0%, #2c5364 100%); border-radius: 8px; padding: 20px; color: white;">
+    <h2 style="margin: 0 0 10px 0; font-size: 20px; font-weight: 600;">
+        👋 SalesMind 管理画面へようこそ
+    </h2>
+    <p style="margin: 0; opacity: 0.9; font-size: 14px;">
+        左側のメニューから各機能にアクセスできます。「外部ツール」メニューからGoogle Analyticsを確認できます。
+    </p>
+</div>
+
+{{ block.super }}
+{% endblock %}

@@ -252,35 +252,46 @@ class RealtimeClient {
      * セッション情報から顧客ペルソナのinstructionsを生成
      */
     _buildCustomerInstructions() {
-        let instructions = `あなたは「顧客」役です。営業担当者から商品やサービスの提案を受ける立場として会話してください。
+        let instructions = `【重要：あなたの役割は「顧客」です】
 
-重要なルール：
-- あなたは「顧客」です。営業担当者ではありません。
-- 営業担当者からの提案に対して、質問したり、懸念を表明したり、興味を示したりしてください。
-- 自分から商品を売り込んだり、営業トークをしないでください。
-- 日本語で自然に会話してください。
+あなたは営業ロールプレイの「顧客」役を演じます。
+相手（ユーザー）が「営業担当者」で、あなたに商品やサービスを提案してきます。
+
+=== 絶対に守るべきルール ===
+1. あなたは「顧客」です。「営業担当者」ではありません。
+2. 商品やサービスを売り込む側ではなく、提案を受ける側です。
+3. 自分から商品の説明や営業トークをしてはいけません。
+4. 営業担当者の話を聞いて、質問したり、興味を示したり、懸念を表明してください。
+5. 日本語で自然に会話してください。
+
+=== あなたの振る舞い ===
+- 営業担当者の提案に対して「なるほど」「それはどういうことですか？」などと反応する
+- 価格や導入コストについて質問する
+- 自社の課題やニーズについて話す
+- 競合製品との比較を尋ねる
+- 導入の障壁や懸念点を述べる
 `;
         
         // セッション情報がある場合、詳細なペルソナを追加
         if (this.sessionInfo) {
             if (this.sessionInfo.customer_persona) {
-                instructions += `\n【あなたの役割・立場】\n${this.sessionInfo.customer_persona}\n`;
+                instructions += `\n=== あなたのペルソナ・役割 ===\n${this.sessionInfo.customer_persona}\n`;
             }
             
             if (this.sessionInfo.industry) {
-                instructions += `\n【あなたの業界】\n${this.sessionInfo.industry}\n`;
+                instructions += `\n=== あなたの業界 ===\n${this.sessionInfo.industry}\n`;
             }
             
             if (this.sessionInfo.company_name) {
-                instructions += `\n【あなたの会社名】\n${this.sessionInfo.company_name}\n`;
+                instructions += `\n=== あなたの会社名 ===\n${this.sessionInfo.company_name}\n`;
             }
             
             if (this.sessionInfo.value_proposition) {
-                instructions += `\n【営業担当者が提案しようとしている商品・サービス】\n${this.sessionInfo.value_proposition}\n（注意：これはあなたが売るものではなく、営業担当者から提案されるものです）\n`;
+                instructions += `\n=== 営業担当者が提案しようとしている商品・サービス ===\n${this.sessionInfo.value_proposition}\n（注意：これはあなたが売るものではなく、営業担当者があなたに提案してくるものです）\n`;
             }
         }
         
-        instructions += `\n顧客として自然に振る舞い、営業担当者の話を聞いて適切に反応してください。`;
+        instructions += `\n繰り返しますが、あなたは「顧客」です。営業担当者の話を聞いて、顧客として自然に反応してください。`;
         
         console.log('📝 生成されたinstructions:', instructions);
         return instructions;

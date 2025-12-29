@@ -25,6 +25,7 @@ window.onload = function() {
     }
     checkAuth();
     initMode();
+    initTTSSettings();  // TTS設定を初期化
 };
 
 // モード初期化
@@ -1260,6 +1261,35 @@ async function sendChatMessage() {
                                 showLossPhaseIndicator(data.conversation_phase);
                             }
                             
+                            // 詳細診断モードの場合、TTSボタンを追加
+                            if (currentMode === 'detailed' && fullResponse) {
+                                console.log('[TTS] TTSボタンを追加中...');
+                                // TTSボタンを追加
+                                const ttsButton = document.createElement('button');
+                                ttsButton.className = 'tts-play-btn';
+                                ttsButton.title = '音声で再生';
+                                ttsButton.textContent = '🔊';
+                                // fullResponseを保持するためにクロージャを使用
+                                const responseText = fullResponse;
+                                ttsButton.onclick = function() {
+                                    console.log('[TTS] 🔊ボタンがクリックされました');
+                                    playCustomerVoice(responseText);
+                                };
+                                const header = customerMessageDiv.querySelector('.message-header');
+                                if (header) {
+                                    header.appendChild(ttsButton);
+                                    console.log('[TTS] TTSボタンを追加しました');
+                                } else {
+                                    console.warn('[TTS] message-headerが見つかりません');
+                                }
+                                
+                                // 自動再生が有効な場合は音声を再生
+                                if (autoPlayVoice) {
+                                    console.log('[TTS] 自動再生開始');
+                                    playCustomerVoice(fullResponse);
+                                }
+                            }
+                            
                             // 詳細診断モードの場合、成功率情報を更新
                             if (currentMode === 'detailed' && data.success_probability !== undefined) {
                                 updateSuccessProbability(data.success_probability, data.success_delta, data.analysis_reason, {
@@ -1338,10 +1368,22 @@ function addChatMessage(role, message, temperature = null, temperatureChange = n
         temperatureIcon = `<span class="temperature-icon ${iconClass}">${temperatureChange || ''}</span>`;
     }
     
+    // 音声再生ボタン（詳細診断モードの顧客メッセージのみ）
+    let ttsButton = '';
+    if (role === 'customer' && currentMode === 'detailed') {
+        const escapedMessage = message.replace(/'/g, "\\'").replace(/"/g, '\\"');
+        ttsButton = `
+            <button class="tts-play-btn" onclick="playCustomerVoice('${escapedMessage}')" title="音声で再生">
+                🔊
+            </button>
+        `;
+    }
+    
     messageDiv.innerHTML = `
         <div class="message-header">
             ${roleLabel} - ${timestamp}
             ${temperatureIcon}
+            ${ttsButton}
         </div>
         <div class="message-content">${message}</div>
     `;
@@ -1384,6 +1426,160 @@ function getTemperatureChangeIcon(previousTemp, currentTemp) {
         return '↓'; // 下降
     } else {
         return '→'; // 変化なし
+    }
+}
+
+// ===== Text-to-Speech (TTS) 関連 =====
+
+// 現在選択されている音声
+let selectedVoice = 'nova';
+// 音声の自動再生設定
+let autoPlayVoice = false;
+// 現在再生中のAudio要素
+let currentAudio = null;
+
+// 顧客の応答を音声で再生
+async function playCustomerVoice(text) {
+    console.log('[TTS] playCustomerVoice called with text:', text?.substring(0, 50) + '...');
+    
+    if (!text || !text.trim()) {
+        console.warn('[TTS] 再生するテキストがありません');
+        return;
+    }
+    
+    // 現在再生中の音声があれば停止
+    if (currentAudio) {
+        console.log('[TTS] 既存の音声を停止');
+        currentAudio.pause();
+        currentAudio = null;
+    }
+    
+    try {
+        // 再生ボタンを読み込み中状態に
+        const playButtons = document.querySelectorAll('.tts-play-btn');
+        playButtons.forEach(btn => btn.disabled = true);
+        
+        // 顧客ペルソナを取得
+        const persona = currentSessionInfo?.customer_persona || '';
+        const autoDetect = localStorage.getItem('ttsAutoDetect') === 'true';
+        
+        console.log('[TTS] API呼び出し開始:', { voice: selectedVoice, autoDetect, persona: persona?.substring(0, 30) });
+        console.log('[TTS] API URL:', `${API_BASE_URL}/tts/generate/`);
+        
+        const response = await fetch(`${API_BASE_URL}/tts/generate/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Token ${authToken}`
+            },
+            body: JSON.stringify({
+                text: text,
+                voice: selectedVoice,
+                auto_detect: autoDetect,
+                persona: persona
+            })
+        });
+        
+        console.log('[TTS] APIレスポンス:', response.status, response.statusText);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('[TTS] APIエラー:', errorData);
+            throw new Error(errorData.error || '音声生成に失敗しました');
+        }
+        
+        // 使用された音声を取得
+        const voiceUsed = response.headers.get('X-Voice-Used');
+        console.log('[TTS] 使用された音声:', voiceUsed);
+        
+        // 音声データをBlobとして取得
+        const audioBlob = await response.blob();
+        console.log('[TTS] Blobサイズ:', audioBlob.size, 'bytes');
+        const audioUrl = URL.createObjectURL(audioBlob);
+        
+        // 音声を再生
+        console.log('[TTS] 音声再生開始');
+        currentAudio = new Audio(audioUrl);
+        currentAudio.onended = () => {
+            console.log('[TTS] 音声再生終了');
+            currentAudio = null;
+            URL.revokeObjectURL(audioUrl);
+        };
+        currentAudio.onerror = (e) => {
+            console.error('[TTS] 音声再生エラー:', e);
+            currentAudio = null;
+            URL.revokeObjectURL(audioUrl);
+        };
+        
+        await currentAudio.play();
+        
+    } catch (error) {
+        console.error('[TTS] エラー:', error);
+        console.error('[TTS] スタックトレース:', error.stack);
+        alert('音声再生に失敗しました: ' + error.message);
+    } finally {
+        // ボタンを再度有効化
+        const playButtons = document.querySelectorAll('.tts-play-btn');
+        playButtons.forEach(btn => btn.disabled = false);
+    }
+}
+
+// 音声再生を停止
+function stopVoicePlayback() {
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio = null;
+    }
+}
+
+// 音声設定を変更
+function setVoice(voice) {
+    if (voice === 'auto') {
+        // 自動選択モード：ペルソナから判定するため、novaをデフォルトに
+        selectedVoice = 'nova';
+        localStorage.setItem('ttsVoice', 'auto');
+        localStorage.setItem('ttsAutoDetect', 'true');
+    } else {
+        selectedVoice = voice;
+        localStorage.setItem('ttsVoice', voice);
+        localStorage.setItem('ttsAutoDetect', 'false');
+    }
+    console.log(`音声を変更: ${voice}`);
+}
+
+// 自動再生設定を変更
+function setAutoPlayVoice(enabled) {
+    autoPlayVoice = enabled;
+    localStorage.setItem('ttsAutoPlay', enabled ? 'true' : 'false');
+    console.log(`自動再生: ${enabled ? 'ON' : 'OFF'}`);
+}
+
+// TTS設定を初期化
+function initTTSSettings() {
+    const savedVoice = localStorage.getItem('ttsVoice');
+    if (savedVoice && savedVoice !== 'auto') {
+        selectedVoice = savedVoice;
+    }
+    
+    const savedAutoPlay = localStorage.getItem('ttsAutoPlay');
+    if (savedAutoPlay === 'true') {
+        autoPlayVoice = true;
+    }
+    
+    // UI要素を初期化
+    const voiceSelect = document.getElementById('voiceSelect');
+    if (voiceSelect) {
+        const ttsAutoDetect = localStorage.getItem('ttsAutoDetect');
+        if (ttsAutoDetect === 'true' || savedVoice === 'auto') {
+            voiceSelect.value = 'auto';
+        } else if (savedVoice) {
+            voiceSelect.value = savedVoice;
+        }
+    }
+    
+    const autoPlayCheckbox = document.getElementById('autoPlayVoice');
+    if (autoPlayCheckbox) {
+        autoPlayCheckbox.checked = autoPlayVoice;
     }
 }
 

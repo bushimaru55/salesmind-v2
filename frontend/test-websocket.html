@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .log {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            padding: 15px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+        }
+        .log-info { color: #0066cc; }
+        .log-error { color: #cc0000; background: #ffe6e6; }
+        .log-success { color: #006600; background: #e6ffe6; }
+        button {
+            padding: 10px 20px;
+            margin: 10px 5px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        input {
+            padding: 8px;
+            width: 300px;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    
+    <div>
+        <label>Auth Token:</label><br>
+        <input type="text" id="authToken" placeholder="Enter your auth token">
+    </div>
+    
+    <div>
+        <label>Session ID (optional):</label><br>
+        <input type="text" id="sessionId" placeholder="Enter session ID">
+    </div>
+    
+    <div>
+        <button onclick="testConnection()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+    
+    <h2>Connection Log:</h2>
+    <div id="log" class="log"></div>
+    
+    <script>
+        let ws = null;
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        function testConnection() {
+            const token = document.getElementById('authToken').value;
+            const sessionId = document.getElementById('sessionId').value;
+            
+            if (!token) {
+                log('Error: Auth token is required', 'error');
+                return;
+            }
+            
+            if (ws) {
+                log('Closing existing connection...', 'info');
+                ws.close();
+            }
+            
+            // WebSocket URL
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsHost = window.location.host;
+            let wsUrl = `${wsProtocol}//${wsHost}/ws/realtime/?token=${token}`;
+            
+            if (sessionId) {
+                wsUrl += `&session_id=${sessionId}`;
+            }
+            
+            log(`Connecting to: ${wsUrl}`, 'info');
+            
+            try {
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = () => {
+                    log('✓ WebSocket connection opened!', 'success');
+                };
+                
+                ws.onclose = (event) => {
+                    log(`WebSocket closed: code=${event.code}, reason=${event.reason || 'No reason'}`, 'info');
+                    ws = null;
+                };
+                
+                ws.onerror = (error) => {
+                    log(`✗ WebSocket error: ${error.message || 'Unknown error'}`, 'error');
+                    console.error('WebSocket error:', error);
+                };
+                
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        log(`← Received: ${JSON.stringify(data, null, 2)}`, 'success');
+                    } catch (e) {
+                        log(`← Received (binary): ${event.data.length} bytes`, 'info');
+                    }
+                };
+                
+            } catch (error) {
+                log(`✗ Failed to create WebSocket: ${error.message}`, 'error');
+                console.error('Connection error:', error);
+            }
+        }
+        
+        function disconnect() {
+            if (ws) {
+                log('Disconnecting...', 'info');
+                ws.close();
+                ws = null;
+            } else {
+                log('No active connection', 'info');
+            }
+        }
+        
+        // Auto-fill token from localStorage if available
+        window.onload = () => {
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                document.getElementById('authToken').value = token;
+                log('Auth token loaded from localStorage', 'info');
+            }
+        };
+    </script>
+</body>
+</html>
+
+

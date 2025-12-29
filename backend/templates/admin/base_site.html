@@ -3,6 +3,23 @@
 
 {% block title %}{{ title }} | SalesMind 管理画面{% endblock %}
 
+{% block extrahead %}
+{{ block.super }}
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-HDWNL6YVKF"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-HDWNL6YVKF');
+</script>
+{% endblock %}
+
 {% block branding %}
 <h1 id="site-name"><a href="{% url 'admin:index' %}">SalesMind 管理画面</a></h1>
+{% endblock %}
+
+{% block userlinks %}
+{{ block.super }}
+<a href="https://analytics.google.com/analytics/web/" target="_blank" style="margin-left: 10px;">📊 Analytics</a>
 {% endblock %}

@@ -479,6 +479,8 @@ class Session(models.Model):
     
     class Meta:
         ordering = ['-created_at']
+        verbose_name = 'セッション'
+        verbose_name_plural = 'セッション'
     
     def __str__(self):
         return f"Session {self.id} - {self.industry}"
@@ -542,12 +544,15 @@ class ChatMessage(models.Model):
         indexes = [
             models.Index(fields=['session', 'sequence']),
         ]
+        verbose_name = 'チャットメッセージ'
+        verbose_name_plural = 'チャットメッセージ'
     
     def __str__(self):
         return f"{self.role}: {self.message[:50]}..."
 
 
 class Report(models.Model):
+    """レポート（セッション終了後のスコアリング結果）"""
     id = models.BigAutoField(primary_key=True)
     session = models.OneToOneField(Session, on_delete=models.CASCADE, related_name='report')
     spin_scores = models.JSONField()
@@ -558,6 +563,8 @@ class Report(models.Model):
     
     class Meta:
         ordering = ['-created_at']
+        verbose_name = 'レポート'
+        verbose_name_plural = 'レポート'
     
     def __str__(self):
         return f"Report for Session {self.session.id}"

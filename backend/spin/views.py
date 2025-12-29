@@ -1916,3 +1916,83 @@ def transcribe_speech(request):
             "error": "音声変換に失敗しました",
             "detail": str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_tts(request):
+    """
+    テキストを音声に変換するエンドポイント
+    
+    リクエストボディ:
+    - text: 変換するテキスト（必須）
+    - voice: 音声タイプ（オプション、デフォルト: 'nova'）
+    - speed: 再生速度（オプション、デフォルト: 1.0）
+    - auto_detect: ペルソナから自動検出するかどうか（オプション）
+    - persona: 顧客ペルソナ（auto_detect=trueの場合に使用）
+    
+    レスポンス:
+    - 成功時: audio/mpeg形式の音声データ
+    - 失敗時: JSONエラーメッセージ
+    """
+    from django.http import HttpResponse
+    from .services.tts_service import generate_speech, get_voice_for_persona, AVAILABLE_VOICES
+    
+    text = request.data.get('text', '').strip()
+    voice = request.data.get('voice', 'nova')
+    speed = float(request.data.get('speed', 1.0))
+    auto_detect = request.data.get('auto_detect', False)
+    persona = request.data.get('persona', '')
+    
+    # バリデーション
+    if not text:
+        return Response({
+            "error": "テキストが必須です"
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # テキストが長すぎる場合は制限
+    if len(text) > 4096:
+        return Response({
+            "error": "テキストが長すぎます（最大4096文字）"
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # ペルソナから自動検出
+    if auto_detect and persona:
+        voice = get_voice_for_persona(persona)
+        logger.info(f"TTS音声を自動検出: persona='{persona[:30]}...', voice={voice}")
+    
+    # 音声タイプのバリデーション
+    if voice not in AVAILABLE_VOICES:
+        voice = 'nova'
+    
+    # TTS生成
+    audio_data, error = generate_speech(text, voice=voice, speed=speed)
+    
+    if error:
+        return Response({
+            "error": error
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    # 音声データを返す
+    return HttpResponse(
+        audio_data,
+        content_type='audio/mpeg',
+        headers={
+            'Content-Disposition': 'inline; filename="speech.mp3"',
+            'X-Voice-Used': voice,
+        }
+    )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_tts_voices(request):
+    """
+    利用可能なTTS音声の一覧を取得するエンドポイント
+    """
+    from .services.tts_service import get_available_voices
+    
+    voices = get_available_voices()
+    return Response({
+        "voices": voices
+    }, status=status.HTTP_200_OK)

@@ -403,3 +403,4 @@ postconf -e "relayhost = [smtp.gmail.com]:587"
 3. 必要に応じて、リレーホストまたは外部SMTPサービスの使用を検討
 
 
+

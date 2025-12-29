@@ -1,0 +1,49 @@
+{% load i18n %}
+
+{% if app_list %}
+  {% for app in app_list %}
+    <div class="app-{{ app.app_label }} module{% if app.app_url == '#' %} external-tools{% endif %}">
+      <table>
+        <caption>
+          {% if app.app_url != '#' %}
+            <a href="{{ app.app_url }}" class="section" title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}">{{ app.name }}</a>
+          {% else %}
+            <span class="section" title="{{ app.name }}">{{ app.name }}</span>
+          {% endif %}
+        </caption>
+        {% for model in app.models %}
+          <tr class="model-{{ model.object_name|lower }}">
+            {% if model.admin_url %}
+              {% if model.external_link %}
+                <th scope="row">
+                  <a href="{{ model.admin_url }}" target="_blank" rel="noopener noreferrer">
+                    {{ model.name }} ↗
+                  </a>
+                </th>
+              {% else %}
+                <th scope="row"><a href="{{ model.admin_url }}">{{ model.name }}</a></th>
+              {% endif %}
+            {% else %}
+              <th scope="row">{{ model.name }}</th>
+            {% endif %}
+
+            {% if model.add_url and not model.external_link %}
+              <td><a href="{{ model.add_url }}" class="addlink">{% translate 'Add' %}</a></td>
+            {% else %}
+              <td></td>
+            {% endif %}
+
+            {% if model.admin_url and not model.view_only and not model.external_link %}
+              <td><a href="{{ model.admin_url }}" class="changelink">{% translate 'Change' %}</a></td>
+            {% elif model.add_url or model.external_link %}
+              <td></td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+  {% endfor %}
+{% else %}
+  <p>{% translate "You don't have permission to view or edit anything." %}</p>
+{% endif %}
+

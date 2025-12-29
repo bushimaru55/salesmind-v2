@@ -1,22 +1,11 @@
-// AIProviderKey接続テスト用JavaScript
-
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
-}
+/**
+ * AIProviderKey 接続テスト用JavaScript
+ * 
+ * 依存: common.js
+ */
 
 async function testConnection(keyId) {
-    // 常にフォームから値を取得（新規作成時も既存レコード編集時も）
+    // フォームから値を取得
     let apiKeyField = document.getElementById('id_api_key') || 
                      document.querySelector('input[name="api_key"]') ||
                      document.querySelector('input[type="text"]');
@@ -30,22 +19,17 @@ async function testConnection(keyId) {
     // デバッグ用ログ
     console.log('=== Connection Test Debug ===');
     console.log('keyId:', keyId);
-    console.log('API Key field:', apiKeyField ? (apiKeyField.id || apiKeyField.name || 'found') : 'not found');
     console.log('API Key value:', apiKey ? apiKey.substring(0, 20) + '...' : 'empty');
-    console.log('Provider field:', providerField ? (providerField.id || providerField.name || 'found') : 'not found');
     console.log('Provider value:', provider || 'empty');
     console.log('============================');
     
     // 出力エリアを設定
-    let outputDiv;
-    if (keyId) {
-        outputDiv = document.getElementById(`test-output-${keyId}`);
-    } else {
-        outputDiv = document.getElementById('test-output-new');
-    }
+    let outputDiv = keyId 
+        ? document.getElementById(`test-output-${keyId}`)
+        : document.getElementById('test-output-new');
     
     if (outputDiv) {
-        outputDiv.innerHTML = '<div style="padding: 10px; background: #f0f0f0; border-radius: 4px;">テスト中...</div>';
+        outputDiv.innerHTML = SalesMindAdmin.loadingHtml('テスト中...');
     }
     
     // フォームから値を取得できない場合はエラー
@@ -65,7 +49,7 @@ async function testConnection(keyId) {
         
         const errorMsg = 'APIキーとプロバイダーが必要です。\n\n' + errorDetails.join('\n');
         if (outputDiv) {
-            outputDiv.innerHTML = `<div style="padding: 10px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 4px;"><strong>✗ エラー</strong><br>${errorMsg}</div>`;
+            outputDiv.innerHTML = SalesMindAdmin.errorHtml(errorMsg);
         } else {
             alert(errorMsg);
         }
@@ -73,63 +57,26 @@ async function testConnection(keyId) {
     }
     
     try {
-        // 常にJSONで送信（key_idがあっても、フォームから取得した値を送信）
         const url = '/admin/spin/aiproviderkey/test-connection/';
-        const body = JSON.stringify({
+        const data = await SalesMindAdmin.postJson(url, {
             api_key: apiKey,
             provider: provider,
-            key_id: keyId || null  // key_idも送信（存在する場合）
+            key_id: keyId || null
         });
         
-        console.log('Sending request:', { url, api_key: apiKey.substring(0, 20) + '...', provider });
-        
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: body,
-            credentials: 'same-origin'
-        });
-        
-        const data = await response.json();
-        
-        const successHtml = `
-            <div style="padding: 10px; background: #d4edda; color: #155724; border: 1px solid #c3e6cb; border-radius: 4px;">
-                <strong>✓ 接続成功</strong><br>
-                ${data.message}
-            </div>
-        `;
-        
-        const errorHtml = `
-            <div style="padding: 10px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 4px;">
-                <strong>✗ 接続失敗</strong><br>
-                ${data.message}
-            </div>
-        `;
+        const html = data.success 
+            ? SalesMindAdmin.successHtml('接続成功: ' + data.message)
+            : SalesMindAdmin.errorHtml('接続失敗: ' + data.message);
         
         if (outputDiv) {
-            outputDiv.innerHTML = data.success ? successHtml : errorHtml;
+            outputDiv.innerHTML = html;
         } else {
-            if (data.success) {
-                alert('✓ 接続成功: ' + data.message);
-            } else {
-                alert('✗ 接続失敗: ' + data.message);
-            }
+            alert(data.success ? '✓ 接続成功: ' + data.message : '✗ 接続失敗: ' + data.message);
         }
     } catch (error) {
         console.error('Connection test error:', error);
-        const errorHtml = `
-            <div style="padding: 10px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 4px;">
-                <strong>✗ エラー</strong><br>
-                テスト中にエラーが発生しました: ${error.message}
-            </div>
-        `;
-        
         if (outputDiv) {
-            outputDiv.innerHTML = errorHtml;
+            outputDiv.innerHTML = SalesMindAdmin.errorHtml('テスト中にエラーが発生しました: ' + error.message);
         } else {
             alert('✗ エラー: ' + error.message);
         }

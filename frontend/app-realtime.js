@@ -3,6 +3,12 @@
  * OpenAI Realtime APIを使用したリアルタイム音声会話
  */
 
+// 音声出力設定
+let enableAudioOutput = false;
+let audioOutputContext = null;
+let audioQueue = [];
+let isPlayingAudio = false;
+
 /**
  * チャットモードを切り替え
  */
@@ -72,14 +78,28 @@ async function startRealtimeConversation() {
             return;
         }
         
+        // 音声出力の確認ダイアログ
+        enableAudioOutput = confirm('AI顧客の音声を出力しますか？\n\nはい: 音声出力あり\nいいえ: テキストのみ');
+        
+        if (enableAudioOutput) {
+            console.log('🔊 音声出力: 有効');
+            // AudioContextを初期化
+            audioOutputContext = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: 24000
+            });
+        } else {
+            console.log('🔇 音声出力: 無効');
+        }
+        
         if (window.logger) {
             window.logger.info('リアルタイム会話を開始', { 
                 hasAuthToken: !!authToken, 
-                sessionId: currentSessionId 
+                sessionId: currentSessionId,
+                audioOutput: enableAudioOutput
             });
         }
         
-        console.log('Starting realtime conversation with:', { authToken: authToken.substring(0, 10) + '...', currentSessionId });
+        console.log('Starting realtime conversation with:', { authToken: authToken.substring(0, 10) + '...', currentSessionId, audioOutput: enableAudioOutput });
         
         updateRealtimeStatus('connecting');
         updateRealtimeButton(true, '接続中...');
@@ -176,6 +196,13 @@ async function startRealtimeConversation() {
             realtimeClient.onStatusChange = (status) => {
                 updateRealtimeStatus(status);
             };
+            
+            // 音声再生ハンドラー（音声出力が有効な場合のみ）
+            if (enableAudioOutput) {
+                realtimeClient.onAudio = (base64Audio) => {
+                    playAudioChunk(base64Audio);
+                };
+            }
         }
         
         // 接続
@@ -209,9 +236,90 @@ function stopRealtimeConversation() {
         realtimeClient = null;
     }
     
+    // 音声出力のクリーンアップ
+    stopAudioOutput();
+    
     isRealtimeTalking = false;
     updateRealtimeButton(false, '会話を開始');
     updateRealtimeStatus('disconnected');
+}
+
+/**
+ * Base64エンコードされたPCM16音声データを再生
+ */
+function playAudioChunk(base64Audio) {
+    if (!enableAudioOutput || !audioOutputContext) {
+        return;
+    }
+    
+    try {
+        // Base64をArrayBufferに変換
+        const binaryString = atob(base64Audio);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        // PCM16をFloat32に変換
+        const pcm16 = new Int16Array(bytes.buffer);
+        const float32 = new Float32Array(pcm16.length);
+        for (let i = 0; i < pcm16.length; i++) {
+            float32[i] = pcm16[i] / 32768.0;
+        }
+        
+        // AudioBufferを作成
+        const audioBuffer = audioOutputContext.createBuffer(1, float32.length, 24000);
+        audioBuffer.getChannelData(0).set(float32);
+        
+        // キューに追加
+        audioQueue.push(audioBuffer);
+        
+        // 再生開始
+        if (!isPlayingAudio) {
+            playNextAudioBuffer();
+        }
+    } catch (error) {
+        console.error('音声再生エラー:', error);
+    }
+}
+
+/**
+ * キュー内の次の音声バッファを再生
+ */
+function playNextAudioBuffer() {
+    if (audioQueue.length === 0) {
+        isPlayingAudio = false;
+        return;
+    }
+    
+    isPlayingAudio = true;
+    
+    const buffer = audioQueue.shift();
+    const source = audioOutputContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioOutputContext.destination);
+    
+    source.onended = () => {
+        playNextAudioBuffer();
+    };
+    
+    source.start();
+}
+
+/**
+ * 音声出力を停止してクリーンアップ
+ */
+function stopAudioOutput() {
+    audioQueue = [];
+    isPlayingAudio = false;
+    
+    if (audioOutputContext && audioOutputContext.state !== 'closed') {
+        audioOutputContext.close().catch(() => {});
+        audioOutputContext = null;
+    }
+    
+    enableAudioOutput = false;
 }
 
 /**
