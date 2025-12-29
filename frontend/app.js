@@ -1124,7 +1124,7 @@ async function startSession() {
             document.getElementById('sessionIdDisplay').textContent = currentSessionId;
             document.getElementById('sessionStartResult').style.display = 'block';
         } else {
-            showError('sessionStartResult', 'セッション開始に失敗しました: ' + (data.message || data.error));
+            showError('sessionStartResult', 'セッション開始に失敗しました: ' + (data.detail || data.message || data.error || '不明なエラー'));
         }
     } catch (error) {
         showError('sessionStartResult', 'エラー: ' + error.message);
@@ -1704,7 +1704,9 @@ async function finishSession() {
             currentReportId = data.report_id;
             displayScoringResult(data);
         } else {
-            showError('scoringResult', 'スコアリングに失敗しました: ' + (data.message || data.error));
+            // DRFのAPIExceptionは data.detail で返される
+            const errorMessage = data.detail || data.message || data.error || '不明なエラー';
+            showError('scoringResult', 'スコアリングに失敗しました: ' + errorMessage);
         }
     } catch (error) {
         showError('scoringResult', 'エラー: ' + error.message);
@@ -1832,7 +1834,7 @@ async function viewReport() {
         if (response.ok) {
             displayReportDetails(data);
         } else {
-            showError('reportDetails', 'レポート取得に失敗しました: ' + (data.message || data.error));
+            showError('reportDetails', 'レポート取得に失敗しました: ' + (data.detail || data.message || data.error || '不明なエラー'));
         }
     } catch (error) {
         showError('reportDetails', 'エラー: ' + error.message);
@@ -1943,7 +1945,7 @@ async function viewSessionList() {
         if (response.ok) {
             displaySessionList(data.results);
         } else {
-            showError('sessionListContent', 'セッション一覧取得に失敗しました: ' + (data.message || data.error));
+            showError('sessionListContent', 'セッション一覧取得に失敗しました: ' + (data.detail || data.message || data.error || '不明なエラー'));
         }
     } catch (error) {
         showError('sessionListContent', 'エラー: ' + error.message);
@@ -1994,9 +1996,67 @@ async function viewSessionDetail(sessionId) {
 
 // 新しいセッションを開始
 function startNewSession() {
+    // セッション関連の状態をすべてリセット
     currentSessionId = null;
     currentReportId = null;
+    currentCompanyId = null;
+    currentCompanyInfo = null;
+    currentSessionInfo = null;
+    
+    // チャート関連もリセット
+    temperatureChartData = [];
+    
+    // 会話モードをテキストに戻す
+    conversationMode = 'text';
+    
+    // フォームの値もクリア
+    clearAllForms();
+    
+    // ステップ1に戻る
     resetToStep1();
+    
+    if (window.logger) {
+        window.logger.info('新しいセッションを開始しました');
+    }
+}
+
+// すべてのフォームをクリア
+function clearAllForms() {
+    // 簡易診断モードのフォーム
+    const simpleFormFields = ['industry', 'value_proposition', 'customer_persona'];
+    simpleFormFields.forEach(id => {
+        const field = document.getElementById(id);
+        if (field) field.value = '';
+    });
+    
+    // 詳細診断モードのフォーム
+    const detailedFormFields = ['companyUrl', 'scrapingStatus', 'value_proposition_detailed', 'customer_persona_detailed'];
+    detailedFormFields.forEach(id => {
+        const field = document.getElementById(id);
+        if (field) {
+            if (id === 'scrapingStatus') {
+                field.innerHTML = '';
+                field.style.display = 'none';
+            } else {
+                field.value = '';
+            }
+        }
+    });
+    
+    // 企業情報表示をクリア
+    const companyInfoDisplay = document.getElementById('companyInfoDisplay');
+    if (companyInfoDisplay) {
+        companyInfoDisplay.innerHTML = '';
+        companyInfoDisplay.style.display = 'none';
+    }
+    
+    // スコアリング結果をクリア
+    const scoringResult = document.getElementById('scoringResult');
+    if (scoringResult) scoringResult.innerHTML = '';
+    
+    // レポート詳細をクリア
+    const reportDetails = document.getElementById('reportDetails');
+    if (reportDetails) reportDetails.innerHTML = '';
 }
 
 // ステップ1にリセット

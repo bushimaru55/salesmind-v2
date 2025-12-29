@@ -26,6 +26,9 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         self.user = None
         self.session_id = None
         self.forwarding_task = None
+        # 会話履歴用のバッファ
+        self.pending_user_transcript = None  # ユーザーの発言を一時保存
+        self.message_sequence = 0  # メッセージの順番を管理
         
     async def connect(self):
         """WebSocket接続時の処理"""
@@ -59,9 +62,11 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             
             logger.info(f"✅ WebSocket接続受け入れ: user={self.user.username}, session={self.session_id}")
             
-            # セッションをrealtime_mode=Trueに更新
+            # セッションをrealtime_mode=Trueに更新し、既存のメッセージ数を取得
             if self.session_id:
                 await self.update_session_realtime_mode(True)
+                self.message_sequence = await self.get_message_count()
+                logger.info(f"📊 既存メッセージ数: {self.message_sequence}")
             
             # クライアントとの接続を受け入れ
             await self.accept()
@@ -273,9 +278,40 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             
             message_type = data.get('type')
             
-            # 会話メッセージのみを保存
-            if message_type in ['conversation.item.created', 'response.done']:
-                await self.save_chat_message(data)
+            # OpenAI Realtime APIの主要なイベントタイプを処理
+            
+            # ユーザーの発言（音声トランスクリプト完了）
+            if message_type == 'conversation.item.input_audio_transcription.completed':
+                transcript = data.get('transcript', '')
+                if transcript and transcript.strip():
+                    logger.info(f"💬 ユーザー発言を保存: {transcript[:50]}...")
+                    await self.save_chat_message_direct(
+                        role='salesperson',
+                        message=transcript.strip()
+                    )
+            
+            # AIの応答（トランスクリプト完了）
+            elif message_type == 'response.audio_transcript.done':
+                transcript = data.get('transcript', '')
+                if transcript and transcript.strip():
+                    logger.info(f"🤖 AI応答を保存: {transcript[:50]}...")
+                    await self.save_chat_message_direct(
+                        role='customer',
+                        message=transcript.strip()
+                    )
+            
+            # フォールバック: response.output_item.done も処理
+            elif message_type == 'response.output_item.done':
+                item = data.get('item', {})
+                if item.get('role') == 'assistant':
+                    content = item.get('content', [])
+                    for c in content:
+                        if c.get('type') == 'audio' and c.get('transcript'):
+                            transcript = c.get('transcript', '')
+                            if transcript and transcript.strip():
+                                # response.audio_transcript.doneで既に保存されている可能性があるのでスキップ
+                                # logger.debug(f"response.output_item.done: {transcript[:50]}...")
+                                pass
                 
         except Exception as e:
             logger.error(f"Error saving message to session: {e}", exc_info=True)
@@ -293,6 +329,19 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             logger.warning(f"⚠️ Session {self.session_id} not found for user {self.user.username}")
         except Exception as e:
             logger.error(f"❌ Failed to update session realtime_mode: {e}", exc_info=True)
+    
+    @database_sync_to_async
+    def get_message_count(self):
+        """セッションの既存メッセージ数を取得"""
+        try:
+            from .models import Session
+            session = Session.objects.get(id=self.session_id, user=self.user)
+            return session.messages.count()
+        except Session.DoesNotExist:
+            return 0
+        except Exception as e:
+            logger.error(f"Error getting message count: {e}")
+            return 0
     
     @database_sync_to_async
     def get_user_from_token(self, token_key):
@@ -329,7 +378,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
     
     @database_sync_to_async
     def save_chat_message(self, data):
-        """チャットメッセージをデータベースに保存"""
+        """チャットメッセージをデータベースに保存（レガシー）"""
         try:
             from .models import Session, ChatMessage
             
@@ -348,20 +397,60 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
                 for c in content:
                     if c.get('type') == 'text':
                         text_content.append(c.get('text', ''))
+                    elif c.get('type') == 'audio' and c.get('transcript'):
+                        text_content.append(c.get('transcript', ''))
                 
                 if text_content:
                     message_text = ' '.join(text_content)
                     role = item.get('role', 'assistant')
                     
+                    # ロール変換: OpenAI形式 -> SalesMind形式
+                    db_role = 'customer' if role == 'assistant' else 'salesperson'
+                    
+                    # シーケンス番号を取得
+                    self.message_sequence += 1
+                    
                     # データベースに保存
                     ChatMessage.objects.create(
                         session=session,
-                        role=role,
-                        message=message_text
+                        role=db_role,
+                        message=message_text,
+                        sequence=self.message_sequence
                     )
                     
-                    logger.info(f"Saved message to session {self.session_id}: {role}")
+                    logger.info(f"Saved message to session {self.session_id}: {db_role} (seq={self.message_sequence})")
                     
         except Exception as e:
             logger.error(f"Error in save_chat_message: {e}", exc_info=True)
+    
+    @database_sync_to_async
+    def save_chat_message_direct(self, role: str, message: str):
+        """チャットメッセージを直接データベースに保存"""
+        try:
+            from .models import Session, ChatMessage
+            
+            if not self.session_id:
+                logger.warning("save_chat_message_direct: session_id is None")
+                return
+            
+            session = Session.objects.get(id=self.session_id)
+            
+            # シーケンス番号を取得（既存のメッセージ数+1）
+            existing_count = session.messages.count()
+            sequence = existing_count + 1
+            
+            # データベースに保存
+            ChatMessage.objects.create(
+                session=session,
+                role=role,
+                message=message,
+                sequence=sequence
+            )
+            
+            logger.info(f"✅ Saved {role} message to session {self.session_id} (seq={sequence}): {message[:30]}...")
+                
+        except Session.DoesNotExist:
+            logger.error(f"Session not found: {self.session_id}")
+        except Exception as e:
+            logger.error(f"Error in save_chat_message_direct: {e}", exc_info=True)
 

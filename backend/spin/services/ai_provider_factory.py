@@ -1,6 +1,7 @@
 """
 AIプロバイダーファクトリー
 複数のAIプロバイダー（OpenAI, Claude, Geminiなど）に対応したクライアント生成
+LangChainとの統合もサポート
 """
 import logging
 from abc import ABC, abstractmethod
@@ -8,12 +9,14 @@ from typing import List, Dict, Any, Optional, Tuple
 from openai import OpenAI
 import os
 
+logger = logging.getLogger(__name__)
+
+# 従来のSDK
 try:
     import anthropic
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
-    logger = logging.getLogger(__name__)
     logger.warning("anthropic library is not installed. Claude API will not be available.")
 
 try:
@@ -21,14 +24,24 @@ try:
     GOOGLE_AVAILABLE = True
 except ImportError:
     GOOGLE_AVAILABLE = False
-    if 'logger' not in locals():
-        logger = logging.getLogger(__name__)
     logger.warning("google-generativeai library is not installed. Gemini API will not be available.")
 
-from spin.models import AIProviderKey, AIModel
+# LangChain
+try:
+    from langchain_openai import ChatOpenAI
+    LANGCHAIN_OPENAI_AVAILABLE = True
+except ImportError:
+    LANGCHAIN_OPENAI_AVAILABLE = False
+    logger.info("langchain-openai not installed. LangChain OpenAI will not be available.")
 
-if 'logger' not in locals():
-    logger = logging.getLogger(__name__)
+try:
+    from langchain_anthropic import ChatAnthropic
+    LANGCHAIN_ANTHROPIC_AVAILABLE = True
+except ImportError:
+    LANGCHAIN_ANTHROPIC_AVAILABLE = False
+    logger.info("langchain-anthropic not installed. LangChain Anthropic will not be available.")
+
+from spin.models import AIProviderKey, AIModel
 
 
 class BaseAIClient(ABC):
@@ -398,5 +411,117 @@ class AIProviderFactory:
                     logger.error(f"Fallback provider also failed for {purpose}: {e}")
         
         logger.error(f"No available provider for purpose: {purpose}")
+        return None, None
+    
+    @staticmethod
+    def create_langchain_chat_model(
+        provider_key: AIProviderKey,
+        model: AIModel,
+        temperature: float = 0.7,
+        streaming: bool = False,
+    ):
+        """
+        LangChain ChatModelを作成
+        
+        Args:
+            provider_key: AIProviderKeyインスタンス
+            model: AIModelインスタンス
+            temperature: Temperature設定
+            streaming: ストリーミングを有効化
+        
+        Returns:
+            BaseChatModel: LangChain ChatModelインスタンス
+        
+        Raises:
+            ImportError: LangChainがインストールされていない場合
+            ValueError: サポートされていないプロバイダーの場合
+        """
+        provider = provider_key.provider
+        
+        if provider == 'openai':
+            if not LANGCHAIN_OPENAI_AVAILABLE:
+                raise ImportError(
+                    "langchain-openai is not installed. "
+                    "Please install it with: pip install langchain-openai"
+                )
+            return ChatOpenAI(
+                api_key=provider_key.api_key,
+                model=model.model_id,
+                temperature=temperature,
+                max_tokens=model.max_output_tokens or 2000,
+                streaming=streaming,
+            )
+        
+        elif provider == 'anthropic':
+            if not LANGCHAIN_ANTHROPIC_AVAILABLE:
+                raise ImportError(
+                    "langchain-anthropic is not installed. "
+                    "Please install it with: pip install langchain-anthropic"
+                )
+            return ChatAnthropic(
+                api_key=provider_key.api_key,
+                model=model.model_id,
+                temperature=temperature,
+                max_tokens=model.max_output_tokens or 4096,
+                streaming=streaming,
+            )
+        
+        else:
+            raise ValueError(f"LangChain not supported for provider: {provider}")
+    
+    @staticmethod
+    def get_langchain_model_for_purpose(
+        purpose: str,
+        temperature: float = 0.7,
+        streaming: bool = False,
+    ):
+        """
+        用途に応じたLangChain ChatModelを取得
+        
+        Args:
+            purpose: 用途
+            temperature: Temperature設定
+            streaming: ストリーミングを有効化
+        
+        Returns:
+            Tuple[BaseChatModel, AIModel]: ChatModelとAIModelのタプル
+        """
+        from spin.models import ModelConfiguration
+        
+        try:
+            config = ModelConfiguration.objects.get(purpose=purpose, is_active=True)
+        except ModelConfiguration.DoesNotExist:
+            logger.error(f"No active ModelConfiguration found for purpose: {purpose}")
+            return None, None
+        
+        # Temperature設定を取得
+        if temperature == 0.7:  # デフォルト値の場合は設定から取得
+            temperature = float(config.temperature)
+        
+        provider_key, model = config.get_provider_and_model()
+        
+        if provider_key and model:
+            try:
+                chat_model = AIProviderFactory.create_langchain_chat_model(
+                    provider_key, model, temperature, streaming
+                )
+                logger.info(f"LangChain model for {purpose}: {provider_key.provider} / {model.model_id}")
+                return chat_model, model
+            except Exception as e:
+                logger.warning(f"LangChain primary failed for {purpose}: {e}")
+        
+        # フォールバック
+        if config.has_fallback():
+            fallback_key, fallback_model = config.get_fallback_provider_and_model()
+            if fallback_key and fallback_model:
+                try:
+                    chat_model = AIProviderFactory.create_langchain_chat_model(
+                        fallback_key, fallback_model, temperature, streaming
+                    )
+                    logger.info(f"LangChain fallback for {purpose}: {fallback_key.provider} / {fallback_model.model_id}")
+                    return chat_model, fallback_model
+                except Exception as e:
+                    logger.error(f"LangChain fallback also failed for {purpose}: {e}")
+        
         return None, None
 

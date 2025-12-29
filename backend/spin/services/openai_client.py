@@ -1,14 +1,117 @@
+"""
+AI顧客応答生成サービス
+LangChainを使用してコンテキスト管理と会話メモリを実装
+"""
 import os
 import logging
+from typing import List, Dict, Any, Generator
+
+# LangChain imports
+from spin.services.langchain_service import get_langchain_service, get_chat_model_for_purpose
+from spin.services.memory_manager import (
+    get_memory_manager,
+    prepare_messages_with_memory,
+    prepare_messages_simple,
+    MemoryConfig,
+)
+
+# 既存のインポート（フォールバック用）
 from spin.services.ai_service import AIService
 from spin.services.ai_provider_factory import AIProviderFactory
 
 logger = logging.getLogger(__name__)
 
+# LangChainを使用するかどうかのフラグ
+USE_LANGCHAIN = True  # Falseにすると既存の実装にフォールバック
+
 
 def generate_customer_response(session, conversation_history):
-    """顧客ロールプレイ用の応答を生成"""
-    logger.info(f"AI顧客応答生成を開始: Session {session.id}, mode={session.mode}")
+    """顧客ロールプレイ用の応答を生成（LangChain版）"""
+    logger.info(f"AI顧客応答生成を開始: Session {session.id}, mode={session.mode}, use_langchain={USE_LANGCHAIN}")
+    
+    # LangChainを使用する場合
+    if USE_LANGCHAIN:
+        try:
+            return _generate_customer_response_langchain(session, conversation_history)
+        except ImportError as e:
+            logger.warning(f"LangChain not available, falling back to legacy: {e}")
+        except Exception as e:
+            logger.warning(f"LangChain error, falling back to legacy: {e}")
+    
+    # フォールバック: 既存の実装
+    return _generate_customer_response_legacy(session, conversation_history)
+
+
+def _generate_customer_response_langchain(session, conversation_history):
+    """LangChainを使用した顧客応答生成"""
+    from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+    
+    # ChatModelを取得
+    chat_model, model = get_chat_model_for_purpose('chat', streaming=False)
+    if not chat_model or not model:
+        raise ValueError("チャット用のモデルが設定されていません。管理画面から設定してください。")
+    
+    logger.info(f"使用モデル（LangChain）: {model.provider} / {model.model_id}")
+    
+    # システムプロンプトを構築
+    system_prompt = _build_system_prompt(session, conversation_history)
+    
+    # メモリマネージャーを使用してメッセージを準備
+    # コンテキスト長の70%を会話履歴に使用
+    context_window = model.context_window or 8192
+    max_token_limit = int(context_window * 0.5)  # 50%を会話履歴に
+    
+    messages = prepare_messages_with_memory(
+        session=session,
+        conversation_history=conversation_history,
+        system_prompt=system_prompt,
+        llm=chat_model,
+        max_token_limit=max_token_limit,
+    )
+    
+    # トークン数を確認
+    langchain_service = get_langchain_service()
+    estimated_tokens = langchain_service.count_messages_tokens(
+        [{"role": "user", "content": m.content} for m in messages],
+        model.model_id
+    )
+    
+    logger.debug(f"Estimated tokens: {estimated_tokens}, context_window: {context_window}")
+    
+    if estimated_tokens >= context_window * 0.9:
+        raise ValueError(
+            "会話履歴が長すぎるため、メッセージを処理できません。"
+            "セッションを再開するか、会話を簡潔にしてください。"
+        )
+    
+    # LangChainで呼び出し
+    try:
+        response = chat_model.invoke(messages)
+        response_content = response.content
+        
+        # 使用量をログ
+        if hasattr(response, 'response_metadata'):
+            usage = response.response_metadata.get('token_usage', {})
+            logger.info(
+                f"AI顧客応答生成完了（LangChain）: Session {session.id}, "
+                f"tokens={usage.get('total_tokens', 'N/A')}"
+            )
+        
+        return response_content
+    
+    except Exception as e:
+        error_msg = str(e)
+        if 'context_length' in error_msg.lower() or 'token' in error_msg.lower():
+            raise ValueError(
+                "会話履歴が長すぎるため、メッセージを処理できません。"
+                "セッションを再開するか、会話を簡潔にしてください。"
+            )
+        raise
+
+
+def _generate_customer_response_legacy(session, conversation_history):
+    """既存の実装（フォールバック用）"""
+    logger.info(f"AI顧客応答生成（レガシー）: Session {session.id}")
     
     # チャット用のクライアントとモデルを取得（新しいシステム）
     client, model = AIProviderFactory.get_client_and_model_for_purpose('chat')
@@ -696,3 +799,160 @@ def generate_customer_response_stream(session, conversation_history):
         logger.error(f"AI顧客応答生成エラー（ストリーミング）: Session {session.id}, provider={model.provider}, model={model_name}, Error: {error_msg}", exc_info=True)
         raise ValueError(f"AI顧客の応答生成に失敗しました: {error_msg}")
 
+
+def _build_system_prompt(session, conversation_history) -> str:
+    """システムプロンプトを構築（共通ロジック）"""
+    # 企業情報を取得（詳細診断モードの場合）
+    company_info_text = ""
+    if session.mode == 'detailed' and hasattr(session, 'company') and session.company:
+        company = session.company
+        company_lines = []
+        company_lines.append(f"企業名: {company.company_name}")
+        if company.industry:
+            company_lines.append(f"業界: {company.industry}")
+        if company.business_description:
+            company_lines.append(f"事業内容: {company.business_description}")
+        if company.location:
+            company_lines.append(f"所在地: {company.location}")
+        if company.employee_count:
+            company_lines.append(f"従業員数: {company.employee_count}")
+        if company.established_year:
+            company_lines.append(f"設立年: {company.established_year}")
+        
+        if company.scraped_data:
+            if company.scraped_data.get('text_content'):
+                text_content = company.scraped_data.get('text_content', '')[:2000]
+                company_lines.append(f"\n--- 企業のWebサイト情報 ---")
+                company_lines.append(text_content)
+        
+        company_info_text = "\n".join(company_lines)
+    
+    company_info_section = ""
+    if company_info_text:
+        company_info_section = f'--- 企業情報（あなたの会社の情報） ---\n{company_info_text}\n---'
+    
+    # 営業担当者からの質問回数に応じて会話スタイルを段階化
+    salesperson_messages = [msg for msg in conversation_history if msg.role == 'salesperson']
+    question_count = len(salesperson_messages)
+    
+    conversation_phase = getattr(session, 'conversation_phase', 'SPIN_S')
+    current_spin_stage = getattr(session, 'current_spin_stage', 'S')
+    spin_progress_instruction = ""
+    
+    if session.mode == 'detailed':
+        if current_spin_stage == 'S' and question_count >= 5:
+            spin_progress_instruction = (
+                "\n- 重要: 営業担当者が状況確認段階で停滞しています。"
+                "適切に進行していない場合、前向きな返答は行わないでください。"
+            )
+        elif current_spin_stage in ['S', 'P'] and question_count >= 10:
+            spin_progress_instruction = (
+                "\n- 重要: 営業担当者が会話の初期段階で停滞しています。"
+                "課題や示唆が明確になっていない場合、前向きな返答は行わないでください。"
+            )
+    
+    if question_count == 0:
+        conversation_phase_instruction = (
+            "- 【最重要】まだ営業担当者から具体的な質問を受けていないため、丁寧に挨拶を返すだけにしてください。"
+            "- 【最重要】あなたは顧客として、営業担当者から質問されるのを待つ立場です。"
+            "- 【最重要】挨拶の返答例：「こんにちは、よろしくお願いします。」など、挨拶のみにしてください。"
+            "- 回答は1〜2文で簡潔に。"
+        )
+    elif question_count <= 2:
+        conversation_phase_instruction = (
+            "- 営業担当者の質問に丁寧に答えますが、まだ慎重な姿勢を保ち、"
+            "必要な範囲で情報を提供する程度にとどめてください。回答は2〜3文程度で。"
+        )
+    elif conversation_phase in ['CLOSING_READY', 'CLOSING_ACTION']:
+        conversation_phase_instruction = (
+            "- 営業担当者が適切な提案をしてきました。"
+            "課題が明確になり、解決の必要性を感じている場合、前向きな反応を示してもよい。"
+            "回答は2〜3文程度で。"
+        )
+    elif conversation_phase in ['LOSS_CANDIDATE', 'LOSS_CONFIRMED']:
+        conversation_phase_instruction = (
+            "- 営業担当者の提案に対して、導入を見送る、予算がない、などの反応を示してもよい。"
+            "失注（Loss）となる回答を行ってください。回答は2〜3文程度で。"
+        )
+    else:
+        conversation_phase_instruction = (
+            "- 営業担当者が複数の質問を重ね、関心が高まっている状況です。"
+            "具体的な悩みや期待を適度に共有してください。回答は3〜4文程度で。"
+        )
+    
+    conversation_phase_instruction += spin_progress_instruction
+    
+    system_prompt = f"""【役割定義】
+あなたは「AI顧客」です。
+・あなたの役割は顧客として自然に回答すること。
+・あなたは営業行為を絶対に行わない。
+・SPIN法、質問誘導、営業アドバイスは禁止。
+・【最重要】あなたは実在する企業の担当者として演じます。AIであることを明かすことは禁止です。
+
+あなたは以下の設定に基づく顧客AIです。
+
+【業界】{session.industry}
+【価値提案】{session.value_proposition}
+【顧客像】{session.customer_persona or '一般的な企業'}
+課題・ペインポイント: {session.customer_pain or '未設定'}
+
+{company_info_section}
+
+【顧客AIの行動モデル】
+・あなたは実在する企業の担当者として、常識的な判断を行う。
+・営業担当者がSPINプロセスを踏んでいない場合、前向きな返答は行わない。
+・営業担当者が強引、不誠実な振る舞いをした場合、商談継続を拒否してよい。
+
+{conversation_phase_instruction}
+
+【重要な注意事項】
+- 回答は全て自然な日本語で、2〜4文程度のまとまりで返答してください
+- 質問に対しては事実を答えますが、すべてを一度に明かす必要はありません
+- 営業担当者から質問されていない事項については、不自然に話題を切り出さないでください
+"""
+    
+    if company_info_text:
+        system_prompt += "\n- 上記の企業情報を参考にして、具体的で現実味のある応答をしてください"
+    
+    return system_prompt
+
+
+def generate_customer_response_stream_langchain(session, conversation_history) -> Generator[str, None, None]:
+    """LangChainを使用したストリーミング版顧客応答生成"""
+    from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+    
+    if not USE_LANGCHAIN:
+        # フォールバック
+        yield from generate_customer_response_stream(session, conversation_history)
+        return
+    
+    try:
+        # ChatModelを取得（ストリーミング対応）
+        chat_model, model = get_chat_model_for_purpose('chat', streaming=True)
+        if not chat_model or not model:
+            raise ValueError("チャット用のモデルが設定されていません。")
+        
+        logger.info(f"ストリーミング開始（LangChain）: {model.provider} / {model.model_id}")
+        
+        # システムプロンプトを構築
+        system_prompt = _build_system_prompt(session, conversation_history)
+        
+        # メッセージを準備（シンプル版を使用 - ストリーミングでは軽量に）
+        messages = prepare_messages_simple(
+            conversation_history=conversation_history,
+            system_prompt=system_prompt,
+            max_messages=30,
+            max_chars=16000,
+        )
+        
+        # ストリーミングで呼び出し
+        for chunk in chat_model.stream(messages):
+            if chunk.content:
+                yield chunk.content
+    
+    except ImportError as e:
+        logger.warning(f"LangChain not available for streaming: {e}")
+        yield from generate_customer_response_stream(session, conversation_history)
+    except Exception as e:
+        logger.error(f"LangChain streaming error: {e}")
+        raise ValueError(f"AI顧客の応答生成に失敗しました: {str(e)}")
