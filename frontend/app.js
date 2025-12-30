@@ -3463,7 +3463,7 @@ function displayRanking(data, mode) {
     if (mode === 'simple') {
         html += '<th>順位</th><th>ユーザー名</th><th>業界</th><th>総合スコア</th><th>S</th><th>P</th><th>I</th><th>N</th><th>メッセージ数</th><th>完了日時</th>';
     } else {
-        html += '<th>順位</th><th>ユーザー名</th><th>企業名</th><th>総合評価</th><th>スコア</th><th>成功率</th><th>S</th><th>P</th><th>I</th><th>N</th><th>メッセージ数</th><th>完了日時</th>';
+        html += '<th>順位</th><th>ユーザー名</th><th>総合評価</th><th>スコア</th><th>成功率</th><th>S</th><th>P</th><th>I</th><th>N</th><th>メッセージ数</th><th>完了日時</th>';
     }
     
     html += '</tr></thead><tbody>';
@@ -3485,7 +3485,6 @@ function displayRanking(data, mode) {
             const finishedDate = entry.finished_at ? new Date(entry.finished_at).toLocaleString('ja-JP') : '-';
             html += `<td class="date-cell">${finishedDate}</td>`;
         } else {
-            html += `<td class="company-cell">${escapeHtml(entry.company_name || entry.industry || '-')}</td>`;
             html += `<td class="score-cell composite">${entry.composite_score}点</td>`;
             html += `<td class="score-cell">${entry.total_score}点</td>`;
             html += `<td class="score-cell">${entry.success_probability}%</td>`;
