@@ -17,6 +17,14 @@ let conversationMode = 'text'; // 'text' or 'realtime'
 let realtimeClient = null;
 let isRealtimeTalking = false;
 
+// コーチングヒント関連
+let coachingHintsEnabled = true;
+let previousTemperatureScore = null;
+
+// 成功率履歴関連
+let successRateHistory = [];
+const MAX_SUCCESS_HISTORY = 10;
+
 // ページロード時の処理
 window.onload = function() {
     // ロガーを初期化（logger.jsで自動的に初期化される）
@@ -26,6 +34,7 @@ window.onload = function() {
     checkAuth();
     initMode();
     initTTSSettings();  // TTS設定を初期化
+    initCoachingSettings();  // コーチングヒント設定を初期化
 };
 
 // モード初期化
@@ -1234,6 +1243,35 @@ async function sendChatMessage() {
                                 updateTemperatureChart(data.temperature_history);
                             }
                             
+                            // コーチングヒントを生成
+                            // 詳細診断モードの場合はsuccess_deltaを優先的に使用
+                            const scoreForHint = data.success_probability !== undefined 
+                                ? data.success_probability 
+                                : data.current_temperature;
+                            const deltaForHint = data.success_delta !== undefined 
+                                ? data.success_delta 
+                                : (previousTemperatureScore !== null 
+                                    ? data.current_temperature - previousTemperatureScore 
+                                    : 0);
+                            
+                            console.log('[Coaching] ストリーミング完了、ヒント生成開始');
+                            console.log('[Coaching] ヒント用データ:', {
+                                fullResponse: fullResponse?.substring(0, 50) + '...',
+                                scoreForHint,
+                                deltaForHint,
+                                current_spin_stage: data.current_spin_stage,
+                                success_probability: data.success_probability,
+                                success_delta: data.success_delta
+                            });
+                            
+                            generateCoachingHint(
+                                fullResponse, 
+                                scoreForHint, 
+                                deltaForHint,
+                                data.current_spin_stage
+                            );
+                            previousTemperatureScore = data.current_temperature;
+                            
                             // 失注確定の場合、失注情報を表示
                             if (data.loss_response) {
                                 displayLossResponse(data.loss_response);
@@ -1291,7 +1329,15 @@ async function sendChatMessage() {
                             }
                             
                             // 詳細診断モードの場合、成功率情報を更新
+                            console.log('[Score] 成功率データ確認:', {
+                                currentMode,
+                                success_probability: data.success_probability,
+                                success_delta: data.success_delta,
+                                analysis_reason: data.analysis_reason,
+                                current_spin_stage: data.current_spin_stage
+                            });
                             if (currentMode === 'detailed' && data.success_probability !== undefined) {
+                                console.log('[Score] 成功率更新を実行します');
                                 updateSuccessProbability(data.success_probability, data.success_delta, data.analysis_reason, {
                                     currentStage: data.current_spin_stage,
                                     messageSpinType: data.message_spin_type,
@@ -1353,7 +1399,10 @@ function handleChatKeyPress(event) {
 }
 
 // チャットメッセージの追加
-function addChatMessage(role, message, temperature = null, temperatureChange = null) {
+function addChatMessage(role, message, temperature = null, temperatureChange = null, tempDelta = null) {
+    // ウェルカムメッセージを非表示にする
+    hideWelcomeMessage();
+    
     const container = document.getElementById('chatMessages');
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${role}`;
@@ -1363,9 +1412,32 @@ function addChatMessage(role, message, temperature = null, temperatureChange = n
     
     // 温度スコアアイコン（顧客メッセージのみ）
     let temperatureIcon = '';
+    let reactionBadge = '';
     if (role === 'customer' && temperature !== null && temperature !== undefined) {
         const iconClass = temperatureChange === '↑' ? 'temp-up' : temperatureChange === '↓' ? 'temp-down' : 'temp-same';
         temperatureIcon = `<span class="temperature-icon ${iconClass}">${temperatureChange || ''}</span>`;
+        
+        // 反応クラスを追加
+        if (temperatureChange === '↑') {
+            messageDiv.classList.add('reaction-positive');
+            reactionBadge = '<span class="message-reaction-badge positive">👍 好反応</span>';
+        } else if (temperatureChange === '↓') {
+            messageDiv.classList.add('reaction-negative');
+            reactionBadge = '<span class="message-reaction-badge negative">📉 要改善</span>';
+        }
+        
+        // 大きな変化の場合はより強い反応クラスに変更
+        if (tempDelta !== null) {
+            if (tempDelta > 5) {
+                messageDiv.classList.remove('reaction-positive');
+                messageDiv.classList.add('reaction-very-positive');
+                reactionBadge = '<span class="message-reaction-badge positive">🔥 絶好調！</span>';
+            } else if (tempDelta < -5) {
+                messageDiv.classList.remove('reaction-negative');
+                messageDiv.classList.add('reaction-very-negative');
+                reactionBadge = '<span class="message-reaction-badge negative">⚠️ 要注意</span>';
+            }
+        }
     }
     
     // 音声再生ボタン（詳細診断モードの顧客メッセージのみ）
@@ -1383,6 +1455,7 @@ function addChatMessage(role, message, temperature = null, temperatureChange = n
         <div class="message-header">
             ${roleLabel} - ${timestamp}
             ${temperatureIcon}
+            ${reactionBadge}
             ${ttsButton}
         </div>
         <div class="message-content">${message}</div>
@@ -1400,7 +1473,15 @@ function updateChatMessages(conversation) {
         return;
     }
     
+    // ウェルカムメッセージ以外をクリア
+    const welcome = document.getElementById('chatWelcome');
     container.innerHTML = '';
+    if (welcome && conversation.length === 0) {
+        container.appendChild(welcome);
+        showWelcomeMessage();
+    } else if (conversation.length > 0) {
+        hideWelcomeMessage();
+    }
     
     let previousTemperature = null;
     conversation.forEach((msg, index) => {
@@ -1583,6 +1664,413 @@ function initTTSSettings() {
     }
 }
 
+// ===== コーチングヒント機能 =====
+
+// コーチングヒント設定を初期化
+function initCoachingSettings() {
+    const savedState = localStorage.getItem('coachingHintsEnabled');
+    coachingHintsEnabled = savedState !== 'false'; // デフォルトはtrue
+    
+    const toggle = document.getElementById('coachingHintToggle');
+    if (toggle) {
+        toggle.checked = coachingHintsEnabled;
+    }
+    
+    updateCoachingPanelVisibility();
+}
+
+// コーチングヒントの表示/非表示を切り替え
+function toggleCoachingHints(enabled) {
+    coachingHintsEnabled = enabled;
+    localStorage.setItem('coachingHintsEnabled', enabled.toString());
+    updateCoachingPanelVisibility();
+    
+    if (window.logger) {
+        window.logger.info('コーチングヒント設定を変更', { enabled });
+    }
+}
+
+// コーチングパネルの表示状態を更新
+function updateCoachingPanelVisibility() {
+    const panel = document.getElementById('coachingHintPanel');
+    if (panel) {
+        if (coachingHintsEnabled) {
+            panel.classList.remove('hidden');
+        } else {
+            panel.classList.add('hidden');
+        }
+    }
+}
+
+// コーチングパネルの展開/折りたたみ切り替え
+function toggleCoachingPanelExpand() {
+    const panel = document.getElementById('coachingHintPanel');
+    if (panel) {
+        panel.classList.toggle('collapsed');
+    }
+}
+
+// コーチングヒントのプレビューを更新
+function updateCoachingHintPreview(text) {
+    const preview = document.getElementById('coachingHintPreview');
+    if (preview) {
+        preview.textContent = text || '会話を開始してください';
+    }
+}
+
+// コーチングヒントを更新
+function updateCoachingHint(hintType, message, icon = null) {
+    if (!coachingHintsEnabled) return;
+    
+    const content = document.getElementById('coachingHintContent');
+    if (!content) return;
+    
+    // アイコンを決定
+    const icons = {
+        'info': '📝',
+        'success': '✅',
+        'warning': '⚠️',
+        'danger': '🚨',
+        'tip': '💡'
+    };
+    const hintIcon = icon || icons[hintType] || '📝';
+    
+    // 新しいヒントを作成
+    const hintHtml = `
+        <div class="coaching-hint-item hint-${hintType}">
+            <span class="hint-icon">${hintIcon}</span>
+            <span class="hint-text">${message}</span>
+        </div>
+    `;
+    
+    content.innerHTML = hintHtml;
+}
+
+// 複数のコーチングヒントを表示
+function updateCoachingHints(hints) {
+    console.log('[Coaching] updateCoachingHints called:', hints);
+    
+    if (!coachingHintsEnabled) {
+        console.log('[Coaching] ヒント機能が無効');
+        return;
+    }
+    
+    const content = document.getElementById('coachingHintContent');
+    if (!content) {
+        console.log('[Coaching] coachingHintContent要素が見つかりません');
+        return;
+    }
+    
+    const icons = {
+        'info': '📝',
+        'success': '✅',
+        'warning': '⚠️',
+        'danger': '🚨',
+        'tip': '💡'
+    };
+    
+    let hintsHtml = '';
+    hints.forEach(hint => {
+        const hintIcon = hint.icon || icons[hint.type] || '📝';
+        const pulseClass = hint.pulse ? ' hint-pulse' : '';
+        hintsHtml += `
+            <div class="coaching-hint-item hint-${hint.type}${pulseClass}">
+                <span class="hint-icon">${hintIcon}</span>
+                <span class="hint-text">${hint.message}</span>
+            </div>
+        `;
+    });
+    
+    content.innerHTML = hintsHtml;
+    
+    // ヒントパネルにアニメーションを追加
+    const panel = document.getElementById('coachingHintPanel');
+    if (panel) {
+        panel.classList.add('hint-updated');
+        setTimeout(() => panel.classList.remove('hint-updated'), 1000);
+    }
+    
+    // プレビューを更新（最初のヒントのテキストを使用）
+    if (hints.length > 0) {
+        const firstHint = hints[0];
+        const previewText = firstHint.message.replace(/^[^\s]+\s/, ''); // 絵文字を除去
+        updateCoachingHintPreview(previewText.substring(0, 50) + (previewText.length > 50 ? '...' : ''));
+    }
+    
+    console.log('[Coaching] ヒントHTML更新完了');
+}
+
+// 顧客の応答に基づいてコーチングヒントを生成
+function generateCoachingHint(customerMessage, temperatureScore, temperatureChange, spinStage) {
+    if (!coachingHintsEnabled) {
+        console.log('[Coaching] ヒント機能が無効化されています');
+        return;
+    }
+    
+    console.log('[Coaching] ヒント生成開始:', { 
+        messageLength: customerMessage?.length, 
+        temperatureScore, 
+        temperatureChange, 
+        spinStage 
+    });
+    
+    const hints = [];
+    const message = customerMessage || '';
+    
+    // 温度スコアの変化に基づくヒント
+    if (temperatureChange !== null && temperatureChange !== undefined) {
+        if (temperatureChange > 5) {
+            hints.push({
+                type: 'success',
+                message: '🔥 良い反応です！この調子で続けましょう。顧客の興味が高まっています。',
+                icon: '🔥'
+            });
+        } else if (temperatureChange > 0) {
+            hints.push({
+                type: 'success',
+                message: '👍 良い方向に進んでいます。質問を続けてください。',
+                icon: '👍'
+            });
+        } else if (temperatureChange < -5) {
+            hints.push({
+                type: 'warning',
+                message: '📉 顧客の興味が下がっています。質問の方向性を変えてみましょう。',
+                icon: '📉',
+                pulse: true
+            });
+        } else if (temperatureChange < 0) {
+            hints.push({
+                type: 'warning',
+                message: '⚠️ 少し慎重な反応です。別の角度からアプローチしてみましょう。',
+                icon: '⚠️'
+            });
+        }
+    }
+    
+    // 温度スコアの絶対値に基づくヒント
+    if (temperatureScore !== null && temperatureScore !== undefined && hints.length === 0) {
+        if (temperatureScore >= 80) {
+            hints.push({
+                type: 'tip',
+                message: '🎯 クロージングのタイミングです。具体的な提案に移行しましょう。',
+                icon: '🎯'
+            });
+        } else if (temperatureScore >= 60) {
+            hints.push({
+                type: 'success',
+                message: '✨ 顧客の関心が高まっています。深掘り質問をしましょう。',
+                icon: '✨'
+            });
+        } else if (temperatureScore >= 40) {
+            hints.push({
+                type: 'info',
+                message: '📊 中程度の関心です。課題を明確にする質問を続けましょう。',
+                icon: '📊'
+            });
+        } else if (temperatureScore <= 30) {
+            hints.push({
+                type: 'danger',
+                message: '⚡ 顧客の関心が低い状態です。課題やニーズを再度確認してみましょう。',
+                icon: '⚡',
+                pulse: true
+            });
+        }
+    }
+    
+    // キーワード検出に基づくヒント（日本語は大文字小文字変換不要）
+    // ポジティブなキーワード
+    if (message.includes('興味') || message.includes('面白い') || message.includes('いいですね')) {
+        hints.push({
+            type: 'success',
+            message: '👀 顧客が興味を示しています！詳しく説明するチャンスです。',
+            icon: '👀'
+        });
+    }
+    
+    if (message.includes('詳しく') || message.includes('もっと教えて') || message.includes('具体的に')) {
+        hints.push({
+            type: 'success',
+            message: '📝 詳細説明を求められています。具体的な事例やデータを示しましょう。',
+            icon: '📝'
+        });
+    }
+    
+    // 予算・コスト関連
+    if (message.includes('予算') || message.includes('費用') || message.includes('コスト') || message.includes('金額') || message.includes('いくら') || message.includes('値段')) {
+        hints.push({
+            type: 'tip',
+            message: '💰 予算の話題です。ROIや費用対効果を説明しましょう。',
+            icon: '💰'
+        });
+    }
+    
+    // 検討・決定関連
+    if (message.includes('検討') || message.includes('考え') || message.includes('相談')) {
+        hints.push({
+            type: 'info',
+            message: '🤔 検討段階です。決裁者や導入スケジュールを確認しましょう。',
+            icon: '🤔'
+        });
+    }
+    
+    if (message.includes('上司') || message.includes('上長') || message.includes('決裁') || message.includes('承認')) {
+        hints.push({
+            type: 'tip',
+            message: '👔 決裁プロセスの話題です。意思決定者への提案資料を提案しましょう。',
+            icon: '👔'
+        });
+    }
+    
+    // 競合関連
+    if (message.includes('他社') || message.includes('競合') || message.includes('比較') || message.includes('○○社')) {
+        hints.push({
+            type: 'warning',
+            message: '⚔️ 競合の話題です。差別化ポイントを明確に伝えましょう。',
+            icon: '⚔️'
+        });
+    }
+    
+    // スケジュール関連
+    if (message.includes('いつ') || message.includes('スケジュール') || message.includes('納期') || message.includes('期間') || message.includes('時期')) {
+        hints.push({
+            type: 'success',
+            message: '📅 時期に関心があります。導入タイムラインを提示しましょう。',
+            icon: '📅'
+        });
+    }
+    
+    // ネガティブなキーワード
+    if (message.includes('難しい') || message.includes('無理') || message.includes('できない') || message.includes('厳しい')) {
+        hints.push({
+            type: 'danger',
+            message: '🔧 否定的な反応です。具体的な懸念点を確認しましょう。',
+            icon: '🔧',
+            pulse: true
+        });
+    }
+    
+    if (message.includes('必要ない') || message.includes('間に合ってる') || message.includes('今は') || message.includes('タイミング')) {
+        hints.push({
+            type: 'warning',
+            message: '⏰ タイミングの問題かもしれません。将来の課題について聞いてみましょう。',
+            icon: '⏰'
+        });
+    }
+    
+    if (message.includes('わからない') || message.includes('よくわかり') || message.includes('どういう')) {
+        hints.push({
+            type: 'info',
+            message: '❓ 理解が不十分なようです。わかりやすい例で説明しましょう。',
+            icon: '❓'
+        });
+    }
+    
+    // 課題・問題関連
+    if (message.includes('課題') || message.includes('問題') || message.includes('困って') || message.includes('悩み')) {
+        hints.push({
+            type: 'tip',
+            message: '🎯 課題が見えてきました！その影響を深掘りしましょう（I質問）。',
+            icon: '🎯'
+        });
+    }
+    
+    // SPIN段階に基づくヒント
+    if (spinStage && hints.length < 2) {
+        const spinHints = {
+            'S': { type: 'info', message: '🔍 状況確認中です。現状をもっと詳しく聞きましょう。', icon: '🔍' },
+            'P': { type: 'info', message: '❓ 問題発掘中です。課題の影響を具体化しましょう。', icon: '❓' },
+            'I': { type: 'tip', message: '💭 示唆質問の段階です。問題を放置した影響を考えさせましょう。', icon: '💭' },
+            'N': { type: 'success', message: '✨ ニード確認段階です。解決策のメリットを共有しましょう。', icon: '✨' }
+        };
+        
+        const stageKey = spinStage.toUpperCase();
+        if (spinHints[stageKey]) {
+            hints.push(spinHints[stageKey]);
+        }
+    }
+    
+    // ヒントがない場合のデフォルト（メッセージ内容に基づく）
+    if (hints.length === 0) {
+        // 挨拶系
+        if (message.includes('よろしく') || message.includes('こんにちは') || message.includes('ありがとう')) {
+            hints.push({
+                type: 'info',
+                message: '👋 良いスタートです。まずは状況を確認する質問から始めましょう。',
+                icon: '👋'
+            });
+        } else if (message.length < 30) {
+            hints.push({
+                type: 'info',
+                message: '💬 短い返答です。開いた質問で詳しく話してもらいましょう。',
+                icon: '💬'
+            });
+        } else {
+            hints.push({
+                type: 'info',
+                message: '📝 会話を続けましょう。顧客の発言から課題を見つけてください。',
+                icon: '📝'
+            });
+        }
+    }
+    
+    console.log('[Coaching] 生成されたヒント:', hints);
+    
+    // 最大2つまで表示
+    updateCoachingHints(hints.slice(0, 2));
+}
+
+// ウェルカムメッセージのセッション情報を更新
+function updateWelcomeSessionInfo() {
+    const card = document.getElementById('sessionInfoCard');
+    if (!card) return;
+    
+    let html = '';
+    
+    if (currentSessionInfo) {
+        if (currentSessionInfo.company_name) {
+            html += `<div class="info-item"><span class="info-label">企業:</span><span class="info-value">${currentSessionInfo.company_name}</span></div>`;
+        }
+        if (currentSessionInfo.industry) {
+            html += `<div class="info-item"><span class="info-label">業界:</span><span class="info-value">${currentSessionInfo.industry}</span></div>`;
+        }
+        if (currentSessionInfo.customer_persona) {
+            html += `<div class="info-item"><span class="info-label">顧客像:</span><span class="info-value">${currentSessionInfo.customer_persona}</span></div>`;
+        }
+        if (currentSessionInfo.value_proposition) {
+            html += `<div class="info-item"><span class="info-label">提案:</span><span class="info-value">${currentSessionInfo.value_proposition}</span></div>`;
+        }
+    }
+    
+    if (!html) {
+        html = '<p style="color: #888; font-size: 0.9em;">セッション情報を準備中...</p>';
+    }
+    
+    card.innerHTML = html;
+}
+
+// ウェルカムメッセージを非表示にする
+function hideWelcomeMessage() {
+    const welcome = document.getElementById('chatWelcome');
+    if (welcome) {
+        welcome.style.display = 'none';
+    }
+}
+
+// ウェルカムメッセージを表示する
+function showWelcomeMessage() {
+    const welcome = document.getElementById('chatWelcome');
+    if (welcome) {
+        welcome.style.display = 'flex';
+    }
+    updateWelcomeSessionInfo();
+}
+
+// コーチングヒントをリセット
+function resetCoachingHints() {
+    previousTemperatureScore = null;
+    updateCoachingHint('info', '会話を開始すると、顧客の反応に応じたアドバイスが表示されます', '📝');
+}
+
 // チャット履歴の読み込み
 async function loadChatHistory() {
     if (!currentSessionId) return;
@@ -1617,9 +2105,12 @@ async function loadChatHistory() {
                 hideSuccessMeter();
             }
             
-            // メッセージがある場合は表示
-            if (data.messages) {
+            // メッセージがある場合は表示、なければウェルカムメッセージを表示
+            if (data.messages && data.messages.length > 0) {
                 updateChatMessages(data.messages);
+            } else {
+                // メッセージがない場合はウェルカムメッセージを表示
+                showWelcomeMessage();
             }
         }
     } catch (error) {
@@ -1701,9 +2192,15 @@ function displayCompanySummary(companyData) {
 
 // 成功率パネルを表示
 function showSuccessMeter() {
+    // 旧パネルは非表示（スペース節約のため）
     const successMeter = document.getElementById('successMeter');
     if (successMeter) {
-        successMeter.style.display = 'block';
+        successMeter.style.display = 'none';  // 'block' → 'none' に変更してスペース節約
+    }
+    // ステータスバーを表示（新UI）
+    const statusBar = document.getElementById('chatStatusBar');
+    if (statusBar) {
+        statusBar.style.display = 'flex';
     }
 }
 
@@ -1712,6 +2209,11 @@ function hideSuccessMeter() {
     const successMeter = document.getElementById('successMeter');
     if (successMeter) {
         successMeter.style.display = 'none';
+    }
+    // ステータスバーも非表示
+    const statusBar = document.getElementById('chatStatusBar');
+    if (statusBar) {
+        statusBar.style.display = 'none';
     }
     const spinMeta = document.getElementById('successSpinMeta');
     if (spinMeta) {
@@ -1734,6 +2236,9 @@ function hideSuccessMeter() {
 
 // 成功率を更新
 function updateSuccessProbability(probability, delta, reason, metadata = {}) {
+    console.log('[Score] updateSuccessProbability呼び出し:', { probability, delta, reason, metadata });
+    
+    // 旧UI要素
     const probabilityValue = document.getElementById('successProbabilityValue');
     const deltaDisplay = document.getElementById('successDeltaDisplay');
     const deltaValue = document.getElementById('successDeltaValue');
@@ -1746,10 +2251,21 @@ function updateSuccessProbability(probability, delta, reason, metadata = {}) {
     const evaluationEl = document.getElementById('successSpinEvaluation');
     const sessionStageEl = document.getElementById('successSpinSessionStage');
     const systemNotesEl = document.getElementById('successSystemNotes');
+    
+    // 新ステータスバー要素
+    const statusBar = document.getElementById('chatStatusBar');
+    const statusScoreValue = document.getElementById('statusScoreValue');
+    const statusDelta = document.getElementById('statusDelta');
+    const statusTrendArrow = document.getElementById('statusTrendArrow');
+    const statusTrendText = document.getElementById('statusTrendText');
+    const statusStageBadge = document.getElementById('statusStageBadge');
+    const statusHistory = document.getElementById('statusHistory');
+    
     const { currentStage, messageSpinType, stepAppropriateness, stageEvaluation, sessionStage, systemNotes } = metadata;
     
+    // 旧UIの更新
     if (probabilityValue) {
-        // アニメーションを追加
+        console.log('[Score] 成功率表示を更新:', probability);
         probabilityValue.classList.add('updating');
         setTimeout(() => {
             probabilityValue.textContent = probability;
@@ -1757,16 +2273,74 @@ function updateSuccessProbability(probability, delta, reason, metadata = {}) {
         }, 100);
     }
     
-    // 変動量を表示
-    if (deltaDisplay && deltaValue && delta !== 0) {
-        deltaDisplay.style.display = 'flex';
-        deltaValue.textContent = (delta > 0 ? '+' : '') + delta;
-        deltaValue.className = 'success-delta-value ' + (delta > 0 ? 'positive' : 'negative');
+    // 新ステータスバーの更新
+    if (statusScoreValue) {
+        statusScoreValue.classList.add('updating');
+        setTimeout(() => {
+            statusScoreValue.textContent = Math.round(probability);
+            statusScoreValue.classList.remove('updating');
+        }, 100);
+    }
+    
+    // ステータスバーの変動表示
+    if (statusDelta && delta !== 0) {
+        statusDelta.textContent = (delta > 0 ? '+' : '') + delta;
+        statusDelta.className = 'status-delta ' + (delta > 0 ? 'positive' : 'negative');
+        statusDelta.style.display = 'inline-block';
         
-        // 3秒後に非表示
+        // ステータスバーにパルスエフェクト
+        if (statusBar) {
+            statusBar.classList.add(delta > 0 ? 'pulse-positive' : 'pulse-negative');
+            setTimeout(() => {
+                statusBar.classList.remove('pulse-positive', 'pulse-negative');
+            }, 1500);
+        }
+        
+        // 5秒後に非表示
+        setTimeout(() => {
+            if (statusDelta) statusDelta.style.display = 'none';
+        }, 5000);
+    } else if (statusDelta) {
+        statusDelta.style.display = 'none';
+    }
+    
+    // ステータスバーのトレンド表示
+    if (statusTrendArrow && statusTrendText) {
+        statusTrendArrow.className = 'status-trend-arrow';
+        if (delta > 5) {
+            statusTrendArrow.textContent = '↑↑';
+            statusTrendArrow.classList.add('up');
+            statusTrendText.textContent = '急上昇！';
+        } else if (delta > 0) {
+            statusTrendArrow.textContent = '↑';
+            statusTrendArrow.classList.add('up');
+            statusTrendText.textContent = '上昇';
+        } else if (delta < -5) {
+            statusTrendArrow.textContent = '↓↓';
+            statusTrendArrow.classList.add('down');
+            statusTrendText.textContent = '急下降';
+        } else if (delta < 0) {
+            statusTrendArrow.textContent = '↓';
+            statusTrendArrow.classList.add('down');
+            statusTrendText.textContent = '下降';
+        } else {
+            statusTrendArrow.textContent = '→';
+            statusTrendArrow.classList.add('stable');
+            statusTrendText.textContent = '安定';
+        }
+    }
+    
+    // 変動量を表示（バッジ形式）- 旧UI
+    if (deltaDisplay && deltaValue && delta !== 0) {
+        deltaDisplay.style.display = 'inline-flex';
+        deltaDisplay.className = 'success-delta-badge ' + (delta > 0 ? 'positive' : 'negative');
+        deltaValue.textContent = (delta > 0 ? '+' : '') + delta;
+        
+        console.log('[Score] 変動表示:', { delta, className: deltaDisplay.className });
+        
         setTimeout(() => {
             deltaDisplay.style.display = 'none';
-        }, 3000);
+        }, 5000);
     } else if (deltaDisplay && delta === 0) {
         deltaDisplay.style.display = 'none';
     }
@@ -1804,58 +2378,52 @@ function updateSuccessProbability(probability, delta, reason, metadata = {}) {
         unknown: '段階を判定できません'
     };
     
+    // SPIN段階バッジの更新（コンパクトUI用）
+    const currentStageKey = currentStage || sessionStage || 'S';
+    if (stageEl) {
+        const stageLabel = stageLabelMap[currentStageKey] || currentStageKey;
+        stageEl.textContent = stageLabel;
+        console.log('[Score] SPIN段階更新:', stageLabel);
+    }
+    if (messageEl) {
+        const messageLabel = messageSpinType ? (stageLabelMap[messageSpinType] || messageSpinType) : '';
+        if (messageLabel) {
+            messageEl.textContent = `→ ${messageLabel}`;
+            messageEl.style.display = 'inline-block';
+        } else {
+            messageEl.style.display = 'none';
+        }
+    }
+    
+    // ステータスバーのSPIN段階バッジ更新
+    if (statusStageBadge) {
+        statusStageBadge.textContent = currentStageKey;
+        // バッジの色を段階に応じて変更
+        const stageColors = {
+            'S': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            'P': 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+            'I': 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+            'N': 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)'
+        };
+        statusStageBadge.style.background = stageColors[currentStageKey] || stageColors['S'];
+    }
+    
+    // レガシー要素の処理（互換性のため）
     if (spinMeta) {
         const hasMeta = Boolean(currentStage || messageSpinType || stepAppropriateness || stageEvaluation || sessionStage);
-        if (hasMeta) {
-            spinMeta.style.display = 'block';
-            if (stageEl) {
-                const stageLabel = currentStage ? (stageLabelMap[currentStage] || currentStage) : '未判定';
-                stageEl.textContent = `現在の段階: ${stageLabel}`;
-                stageEl.style.display = 'block';
-            }
-            if (messageEl) {
-                const messageLabel = messageSpinType ? (stageLabelMap[messageSpinType] || messageSpinType) : '';
-                messageEl.textContent = messageLabel ? `今回の発言: ${messageLabel}` : '';
-                messageEl.style.display = messageLabel ? 'block' : 'none';
-            }
-            if (stepEl) {
-                const stepLabel = stepAppropriateness ? (stepLabelMap[stepAppropriateness] || stepAppropriateness) : '';
-                stepEl.textContent = stepLabel ? `ステップ適切性: ${stepLabel}` : '';
-                stepEl.style.display = stepLabel ? 'block' : 'none';
-            }
-            if (evaluationEl) {
-                const evalLabel = stageEvaluation ? (evalLabelMap[stageEvaluation] || stageEvaluation) : '';
-                evaluationEl.textContent = evalLabel ? `段階評価: ${evalLabel}` : '';
-                evaluationEl.style.display = evalLabel ? 'block' : 'none';
-            }
-            if (sessionStageEl) {
-                const sessionStageLabel = sessionStage ? (stageLabelMap[sessionStage] || sessionStage) : '';
-                sessionStageEl.textContent = sessionStageLabel ? `システム段階: ${sessionStageLabel}` : '';
-                sessionStageEl.style.display = sessionStageLabel ? 'block' : 'none';
-            }
-        } else {
-            spinMeta.style.display = 'none';
-            if (stageEl) {
-                stageEl.textContent = '';
-                stageEl.style.display = 'none';
-            }
-            if (messageEl) {
-                messageEl.textContent = '';
-                messageEl.style.display = 'none';
-            }
-            if (stepEl) {
-                stepEl.textContent = '';
-                stepEl.style.display = 'none';
-            }
-            if (evaluationEl) {
-                evaluationEl.textContent = '';
-                evaluationEl.style.display = 'none';
-            }
-            if (sessionStageEl) {
-                sessionStageEl.textContent = '';
-                sessionStageEl.style.display = 'none';
-            }
-        }
+        spinMeta.style.display = hasMeta ? 'block' : 'none';
+    }
+    if (stepEl) {
+        const stepLabel = stepAppropriateness ? (stepLabelMap[stepAppropriateness] || stepAppropriateness) : '';
+        stepEl.textContent = stepLabel;
+    }
+    if (evaluationEl) {
+        const evalLabel = stageEvaluation ? (evalLabelMap[stageEvaluation] || stageEvaluation) : '';
+        evaluationEl.textContent = evalLabel;
+    }
+    if (sessionStageEl) {
+        const sessionStageLabel = sessionStage ? (stageLabelMap[sessionStage] || sessionStage) : '';
+        sessionStageEl.textContent = sessionStageLabel;
     }
     if (systemNotesEl) {
         if (systemNotes) {
@@ -1865,6 +2433,182 @@ function updateSuccessProbability(probability, delta, reason, metadata = {}) {
             systemNotesEl.textContent = '';
             systemNotesEl.style.display = 'none';
         }
+    }
+    
+    // 成功率履歴を更新
+    updateSuccessHistory(probability, delta);
+    
+    // トレンドインジケーターを更新
+    updateSuccessTrend(delta);
+    
+    // チャット背景エフェクトを適用
+    applyChatReactionEffect(delta);
+    
+    // 成功率メーターにハイライト効果を追加（変動があった場合）
+    const successMeter = document.getElementById('successMeter');
+    if (successMeter && delta !== 0) {
+        successMeter.classList.add(delta > 0 ? 'meter-positive-pulse' : 'meter-negative-pulse');
+        setTimeout(() => {
+            successMeter.classList.remove('meter-positive-pulse', 'meter-negative-pulse');
+        }, 1500);
+    }
+    
+    console.log('[Score] 成功率更新完了:', { probability, delta, historyLength: successRateHistory.length });
+}
+
+// 成功率履歴バーを更新
+function updateSuccessHistory(probability, delta) {
+    successRateHistory.push({ probability, delta });
+    if (successRateHistory.length > MAX_SUCCESS_HISTORY) {
+        successRateHistory.shift();
+    }
+    
+    // 履歴バーを更新する共通関数
+    function renderHistoryBar(container) {
+        if (!container) return;
+        container.innerHTML = '';
+        
+        successRateHistory.forEach((item, index) => {
+            const barItem = document.createElement('div');
+            barItem.className = 'history-bar-item';
+            
+            if (item.delta > 0) {
+                barItem.classList.add('positive');
+            } else if (item.delta < 0) {
+                barItem.classList.add('negative');
+            } else {
+                barItem.classList.add('neutral');
+            }
+            
+            const heightPercent = Math.max(20, item.probability);
+            barItem.style.height = `${heightPercent}%`;
+            
+            container.appendChild(barItem);
+        });
+    }
+    
+    // 旧UIの履歴バー
+    renderHistoryBar(document.getElementById('successHistoryBar'));
+    
+    // ステータスバーの履歴
+    renderHistoryBar(document.getElementById('statusHistory'));
+}
+
+// 成功率トレンドインジケーターを更新
+function updateSuccessTrend(delta) {
+    const trendIndicator = document.getElementById('successTrendIndicator');
+    const trendArrow = document.getElementById('trendArrow');
+    const trendDescription = document.getElementById('trendDescription');
+    
+    if (!trendIndicator || !trendArrow || !trendDescription) return;
+    
+    trendIndicator.style.display = 'flex';
+    
+    // 矢印とクラスを設定
+    trendArrow.className = 'trend-arrow';
+    
+    if (delta > 5) {
+        trendArrow.textContent = '↑↑';
+        trendArrow.classList.add('up');
+        trendDescription.textContent = '大幅上昇！';
+    } else if (delta > 0) {
+        trendArrow.textContent = '↑';
+        trendArrow.classList.add('up');
+        trendDescription.textContent = '上昇中';
+    } else if (delta < -5) {
+        trendArrow.textContent = '↓↓';
+        trendArrow.classList.add('down');
+        trendDescription.textContent = '大幅下降...';
+    } else if (delta < 0) {
+        trendArrow.textContent = '↓';
+        trendArrow.classList.add('down');
+        trendDescription.textContent = '下降中';
+    } else {
+        trendArrow.textContent = '→';
+        trendArrow.classList.add('stable');
+        trendDescription.textContent = '安定';
+    }
+}
+
+// チャット背景に反応エフェクトを適用
+function applyChatReactionEffect(delta) {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+    
+    // 既存のreactionクラスを削除
+    chatMessages.classList.remove(
+        'reaction-positive', 
+        'reaction-negative', 
+        'reaction-very-positive', 
+        'reaction-very-negative'
+    );
+    
+    // 既存のインジケーターを削除
+    const existingIndicator = chatMessages.querySelector('.reaction-indicator');
+    if (existingIndicator) {
+        existingIndicator.remove();
+    }
+    
+    // deltaに基づいてエフェクトを適用
+    let reactionClass = '';
+    let indicatorClass = '';
+    let indicatorText = '';
+    let indicatorIcon = '';
+    
+    if (delta > 5) {
+        reactionClass = 'reaction-very-positive';
+        indicatorClass = 'positive';
+        indicatorIcon = '🔥';
+        indicatorText = '好反応！';
+    } else if (delta > 0) {
+        reactionClass = 'reaction-positive';
+        indicatorClass = 'positive';
+        indicatorIcon = '👍';
+        indicatorText = 'Good!';
+    } else if (delta < -5) {
+        reactionClass = 'reaction-very-negative';
+        indicatorClass = 'negative';
+        indicatorIcon = '⚠️';
+        indicatorText = '要注意';
+    } else if (delta < 0) {
+        reactionClass = 'reaction-negative';
+        indicatorClass = 'negative';
+        indicatorIcon = '📉';
+        indicatorText = '下降';
+    }
+    
+    if (reactionClass) {
+        chatMessages.classList.add(reactionClass);
+        
+        // インジケーターを追加
+        const indicator = document.createElement('div');
+        indicator.className = `reaction-indicator ${indicatorClass}`;
+        indicator.innerHTML = `<span>${indicatorIcon}</span><span>${indicatorText}</span>`;
+        chatMessages.appendChild(indicator);
+        
+        // 5秒後にエフェクトをフェードアウト
+        setTimeout(() => {
+            chatMessages.classList.remove(reactionClass);
+            const ind = chatMessages.querySelector('.reaction-indicator');
+            if (ind) {
+                ind.style.opacity = '0';
+                setTimeout(() => ind.remove(), 300);
+            }
+        }, 5000);
+    }
+}
+
+// 成功率履歴をリセット
+function resetSuccessHistory() {
+    successRateHistory = [];
+    const historyBar = document.getElementById('successHistoryBar');
+    if (historyBar) {
+        historyBar.innerHTML = '';
+    }
+    
+    const trendIndicator = document.getElementById('successTrendIndicator');
+    if (trendIndicator) {
+        trendIndicator.style.display = 'none';
     }
 }
 
@@ -2204,6 +2948,13 @@ function startNewSession() {
     
     // 会話モードをテキストに戻す
     conversationMode = 'text';
+    
+    // コーチングヒント関連をリセット
+    previousTemperatureScore = null;
+    resetCoachingHints();
+    
+    // 成功率履歴をリセット
+    resetSuccessHistory();
     
     // フォームの値もクリア
     clearAllForms();

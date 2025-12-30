@@ -4,7 +4,7 @@ OpenAI APIキー管理サービス
 """
 import logging
 from typing import Optional, Tuple
-from spin.models import OpenAIAPIKey, ModelConfiguration
+from spin.models import OpenAIAPIKey, ModelConfiguration, AIProviderKey
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +18,9 @@ class APIKeyManager:
         用途に応じたAPIキーとモデル名を取得
         
         優先順位:
-        1. ModelConfigurationで設定されたモデル（最優先）
-        2. 指定された用途のデフォルトAPIキー
-        3. 指定された用途の有効なAPIキー
-        4. 汎用のデフォルトAPIキー
-        5. 汎用の有効なAPIキー
+        1. ModelConfigurationで設定されたプロバイダーキー + モデル（最優先）
+        2. AIProviderKey（新システム）
+        3. OpenAIAPIKey（レガシー）
         
         Args:
             purpose: APIキーの用途 ('spin_generation', 'chat', 'scoring', 'scraping_analysis', 'general')
@@ -32,63 +30,63 @@ class APIKeyManager:
             見つからない場合は (None, None)
         """
         try:
-            # 0. ModelConfigurationから推奨モデルを取得（最優先）
-            preferred_model = None
+            # 1. ModelConfigurationから設定を取得（最優先）
             try:
                 model_config = ModelConfiguration.objects.get(purpose=purpose, is_active=True)
-                preferred_model = model_config.model_name
-                logger.info(f"ModelConfigurationから推奨モデルを取得: purpose={purpose}, model={preferred_model}")
-            except ModelConfiguration.DoesNotExist:
-                # ModelConfigurationがない場合は、デフォルトの推奨モデルを使用
-                preferred_model = ModelConfiguration.RECOMMENDED_MODELS.get(purpose)
-                if preferred_model:
-                    logger.info(f"デフォルト推奨モデルを使用: purpose={purpose}, model={preferred_model}")
-            
-            # 推奨モデルが設定されている場合、そのモデルを使用するAPIキーを優先的に探す
-            if preferred_model:
-                # 推奨モデルを使用する有効なAPIキーを探す
-                api_key_obj = OpenAIAPIKey.objects.filter(
-                    purpose=purpose,
-                    model_name=preferred_model,
-                    is_active=True
-                ).first()
                 
-                if api_key_obj:
-                    logger.info(
-                        f"推奨モデルのAPIキー取得成功: purpose={purpose}, "
-                        f"key_name={api_key_obj.name}, model={api_key_obj.model_name}"
-                    )
-                    return api_key_obj.api_key, api_key_obj.model_name
-                else:
-                    logger.warning(
-                        f"推奨モデル({preferred_model})のAPIキーが見つかりません。"
-                        f"他のモデルを使用します: purpose={purpose}"
-                    )
+                # primary_provider_keyからAPIキーを取得
+                if model_config.primary_provider_key and model_config.primary_provider_key.is_active:
+                    api_key = model_config.primary_provider_key.api_key
+                    
+                    # モデル名を取得
+                    model_name = None
+                    if model_config.primary_model:
+                        model_name = model_config.primary_model.model_id
+                    elif model_config.legacy_model_name:
+                        model_name = model_config.legacy_model_name
+                    else:
+                        model_name = 'gpt-4o-mini'  # デフォルト
+                    
+                    logger.info(f"ModelConfigurationからAPIキーとモデルを取得: purpose={purpose}, model={model_name}")
+                    return api_key, model_name
+                    
+            except ModelConfiguration.DoesNotExist:
+                logger.debug(f"ModelConfigurationが見つかりません: purpose={purpose}")
             
-            # 推奨モデルのAPIキーがない場合、従来の方法でAPIキーを探す
-            # 1. 指定された用途のデフォルトキーを探す
+            # 2. AIProviderKey（新システム）からOpenAIキーを探す
+            provider_key = AIProviderKey.objects.filter(
+                provider='openai',
+                is_active=True
+            ).first()
+            
+            if provider_key:
+                # ModelConfigurationからモデル名を取得（あれば）
+                model_name = 'gpt-4o-mini'  # デフォルト
+                try:
+                    model_config = ModelConfiguration.objects.get(purpose=purpose, is_active=True)
+                    if model_config.primary_model:
+                        model_name = model_config.primary_model.model_id
+                    elif model_config.legacy_model_name:
+                        model_name = model_config.legacy_model_name
+                except ModelConfiguration.DoesNotExist:
+                    pass
+                
+                logger.info(f"AIProviderKeyからAPIキーを取得: purpose={purpose}, model={model_name}")
+                return provider_key.api_key, model_name
+            
+            # 3. レガシー: OpenAIAPIKeyから探す
             api_key_obj = OpenAIAPIKey.objects.filter(
                 purpose=purpose,
                 is_active=True,
                 is_default=True
             ).first()
             
-            # 2. デフォルトキーがなければ、指定された用途の有効なキーを探す
             if not api_key_obj:
                 api_key_obj = OpenAIAPIKey.objects.filter(
                     purpose=purpose,
                     is_active=True
                 ).first()
             
-            # 3. それでもなければ、汎用のデフォルトキーを探す
-            if not api_key_obj:
-                api_key_obj = OpenAIAPIKey.objects.filter(
-                    purpose='general',
-                    is_active=True,
-                    is_default=True
-                ).first()
-            
-            # 4. 最後の手段として、汎用の有効なキーを探す
             if not api_key_obj:
                 api_key_obj = OpenAIAPIKey.objects.filter(
                     purpose='general',
@@ -97,7 +95,7 @@ class APIKeyManager:
             
             if api_key_obj:
                 logger.info(
-                    f"APIキー取得成功: purpose={purpose}, "
+                    f"OpenAIAPIKeyからAPIキー取得成功: purpose={purpose}, "
                     f"key_name={api_key_obj.name}, model={api_key_obj.model_name}"
                 )
                 return api_key_obj.api_key, api_key_obj.model_name

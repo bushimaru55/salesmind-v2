@@ -440,7 +440,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             sequence = existing_count + 1
             
             # データベースに保存
-            ChatMessage.objects.create(
+            chat_msg = ChatMessage.objects.create(
                 session=session,
                 role=role,
                 message=message,
@@ -448,9 +448,54 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             )
             
             logger.info(f"✅ Saved {role} message to session {self.session_id} (seq={sequence}): {message[:30]}...")
+            
+            # 詳細診断モードかつ営業メッセージの場合、成功率を分析・更新
+            logger.info(f"🔍 分析条件チェック: role={role}, mode={session.mode}, company={session.company}")
+            if role == 'salesperson' and session.mode == 'detailed' and session.company:
+                logger.info(f"📊 成功率分析を開始: session={self.session_id}")
+                try:
+                    self._analyze_and_update_success_rate(session, message, chat_msg)
+                except Exception as e:
+                    logger.error(f"成功率分析エラー（リアルタイム）: {e}", exc_info=True)
+            else:
+                logger.info(f"⏭️ 分析スキップ: 条件を満たしていません")
                 
         except Session.DoesNotExist:
             logger.error(f"Session not found: {self.session_id}")
         except Exception as e:
             logger.error(f"Error in save_chat_message_direct: {e}", exc_info=True)
+    
+    def _analyze_and_update_success_rate(self, session, message, chat_msg):
+        """営業メッセージを分析して成功率を更新（リアルタイムモード用）"""
+        try:
+            from .services.conversation_analysis import analyze_sales_message
+            
+            # 会話履歴を取得
+            conversation_history = list(session.messages.all().order_by('sequence'))
+            
+            # 分析を実行
+            analysis_result = analyze_sales_message(session, conversation_history, message)
+            success_delta = analysis_result.get('success_delta', 0)
+            current_spin_stage = analysis_result.get('current_spin_stage')
+            
+            # 成功率を更新（0-100の範囲でクリップ）
+            new_probability = session.success_probability + success_delta
+            session.success_probability = max(0, min(100, new_probability))
+            
+            # SPIN段階を更新
+            stage_order = {'S': 0, 'P': 1, 'I': 2, 'N': 3}
+            if current_spin_stage in stage_order:
+                session.current_spin_stage = current_spin_stage
+            
+            session.save(update_fields=['success_probability', 'current_spin_stage'])
+            
+            # 営業メッセージに分析結果を保存
+            chat_msg.success_delta = success_delta
+            chat_msg.spin_stage = current_spin_stage
+            chat_msg.save(update_fields=['success_delta', 'spin_stage'])
+            
+            logger.info(f"📊 リアルタイム成功率更新: Session {session.id}, Delta={success_delta}, New={session.success_probability}%, Stage={current_spin_stage}")
+            
+        except Exception as e:
+            logger.error(f"リアルタイム成功率分析エラー: {e}", exc_info=True)
 

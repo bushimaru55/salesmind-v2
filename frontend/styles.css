@@ -438,45 +438,269 @@ body {
     margin: 0 auto;
 }
 
-/* 企業概要表示（チャット画面の上部） */
+/* 企業概要表示（コンパクト版） */
 .company-summary {
-    background: #f0f7ff;
-    border: 2px solid #667eea;
+    background: linear-gradient(135deg, #f0f7ff 0%, #e8f0fe 100%);
+    border: 1px solid #667eea;
     border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 20px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
 }
 
 .company-summary-header {
-    margin-bottom: 15px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .company-summary-header h3 {
     color: #667eea;
-    font-size: 1.2em;
+    font-size: 0.9em;
     margin: 0;
-    padding-bottom: 10px;
-    border-bottom: 2px solid #667eea;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.company-summary-header h3::before {
+    content: "📁";
 }
 
 .company-summary-content {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 8px 16px;
 }
 
 .company-summary-item {
     color: #333;
-    font-size: 0.95em;
-    line-height: 1.6;
+    font-size: 0.85em;
+    line-height: 1.4;
 }
 
 .company-summary-item strong {
     color: #555;
-    margin-right: 8px;
+    margin-right: 4px;
 }
 
-/* 商談成功率パネル（詳細診断モード用） */
+/* 企業概要の折りたたみ */
+.company-summary.collapsed .company-summary-content {
+    display: none;
+}
+
+.company-summary-toggle {
+    background: none;
+    border: none;
+    color: #667eea;
+    cursor: pointer;
+    font-size: 0.8em;
+    padding: 2px 6px;
+    margin-left: auto;
+}
+
+.company-summary-toggle:hover {
+    text-decoration: underline;
+}
+
+/* ===== 商談成功率パネル（コンパクト版） ===== */
+.success-meter-compact {
+    background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    color: white;
+    box-shadow: 0 2px 8px rgba(19, 33, 49, 0.3);
+}
+
+.success-meter-main {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.success-meter-score {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.success-label {
+    font-size: 0.85em;
+    opacity: 0.9;
+    margin-right: 4px;
+}
+
+.success-meter-compact .success-probability-value {
+    font-size: 2em;
+    font-weight: bold;
+    color: #fff;
+    transition: all 0.3s ease;
+}
+
+.success-meter-compact .success-probability-unit {
+    font-size: 1.2em;
+    opacity: 0.9;
+}
+
+.success-delta-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.85em;
+    font-weight: bold;
+    margin-left: 8px;
+    animation: deltaBadgePop 0.3s ease-out;
+}
+
+.success-delta-badge.positive {
+    background: rgba(40, 167, 69, 0.3);
+    color: #4ade80;
+    border: 1px solid rgba(40, 167, 69, 0.5);
+}
+
+.success-delta-badge.negative {
+    background: rgba(220, 53, 69, 0.3);
+    color: #f87171;
+    border: 1px solid rgba(220, 53, 69, 0.5);
+}
+
+@keyframes deltaBadgePop {
+    0% { transform: scale(0); opacity: 0; }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.success-trend-compact {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 6px;
+    font-size: 0.85em;
+}
+
+.success-history-bar-compact {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 24px;
+    padding: 0 8px;
+    flex-grow: 1;
+    min-width: 100px;
+}
+
+.success-history-bar-compact .history-bar-item {
+    flex: 1;
+    min-width: 4px;
+    max-width: 12px;
+    background: rgba(255,255,255,0.3);
+    border-radius: 2px;
+    transition: all 0.3s ease;
+}
+
+.success-history-bar-compact .history-bar-item.positive {
+    background: linear-gradient(to top, #28a745, #4ade80);
+}
+
+.success-history-bar-compact .history-bar-item.negative {
+    background: linear-gradient(to top, #dc3545, #f87171);
+}
+
+.success-history-bar-compact .history-bar-item.neutral {
+    background: rgba(255,255,255,0.4);
+}
+
+.success-meter-details {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    flex-wrap: wrap;
+}
+
+.success-spin-info {
+    display: flex;
+    gap: 8px;
+}
+
+.spin-stage-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: rgba(102, 126, 234, 0.3);
+    border-radius: 4px;
+    font-size: 0.8em;
+    border: 1px solid rgba(102, 126, 234, 0.5);
+}
+
+.spin-message-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: rgba(255, 193, 7, 0.2);
+    border-radius: 4px;
+    font-size: 0.8em;
+    border: 1px solid rgba(255, 193, 7, 0.4);
+}
+
+.success-reason-compact {
+    font-size: 0.8em;
+    opacity: 0.85;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* コンパクトメーターのパルスエフェクト */
+.success-meter-compact.meter-positive-pulse {
+    animation: compactMeterPositivePulse 1.5s ease-out;
+}
+
+.success-meter-compact.meter-negative-pulse {
+    animation: compactMeterNegativePulse 1.5s ease-out;
+}
+
+@keyframes compactMeterPositivePulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+    }
+    25% {
+        box-shadow: 0 0 20px 8px rgba(40, 167, 69, 0.4);
+        border: 2px solid #28a745;
+    }
+    100% {
+        box-shadow: 0 2px 8px rgba(19, 33, 49, 0.3);
+        border: none;
+    }
+}
+
+@keyframes compactMeterNegativePulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+    }
+    25% {
+        box-shadow: 0 0 20px 8px rgba(220, 53, 69, 0.4);
+        border: 2px solid #dc3545;
+    }
+    100% {
+        box-shadow: 0 2px 8px rgba(19, 33, 49, 0.3);
+        border: none;
+    }
+}
+
+/* 成功率の数値が更新される時のハイライト */
+.success-meter-compact .success-probability-value.updating {
+    transform: scale(1.15);
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+    color: #ffd700;
+}
+
+/* レガシー互換性（旧success-meter用） */
 .success-meter {
     background: linear-gradient(135deg, #132131 0%, #1e2f3f 100%);
     border: 2px solid #132131;
@@ -546,6 +770,85 @@ body {
 
 .success-delta-value.negative {
     color: #f87171;
+}
+
+/* 成功率トレンドインジケーター */
+.success-trend-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+}
+
+.trend-arrow {
+    font-size: 1.5em;
+    animation: bounceArrow 0.5s ease-out;
+}
+
+.trend-arrow.up {
+    color: #4ade80;
+}
+
+.trend-arrow.down {
+    color: #f87171;
+}
+
+.trend-arrow.stable {
+    color: #94a3b8;
+}
+
+@keyframes bounceArrow {
+    0% { transform: scale(0.5); opacity: 0; }
+    50% { transform: scale(1.3); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.trend-description {
+    font-size: 0.85em;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+/* 成功率の履歴バー */
+.success-history-bar {
+    display: flex;
+    gap: 3px;
+    margin-top: 10px;
+    height: 30px;
+    align-items: flex-end;
+}
+
+.history-bar-item {
+    flex: 1;
+    min-width: 8px;
+    max-width: 20px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px 2px 0 0;
+    transition: all 0.3s ease;
+}
+
+.history-bar-item.positive {
+    background: linear-gradient(to top, #4ade80, #22c55e);
+}
+
+.history-bar-item.negative {
+    background: linear-gradient(to top, #f87171, #ef4444);
+}
+
+.history-bar-item.neutral {
+    background: linear-gradient(to top, #94a3b8, #64748b);
+}
+
+.history-bar-item:last-child {
+    animation: barPulse 0.5s ease-out;
+}
+
+@keyframes barPulse {
+    0% { transform: scaleY(0); }
+    50% { transform: scaleY(1.2); }
+    100% { transform: scaleY(1); }
 }
 
 .success-delta-unit {
@@ -657,6 +960,89 @@ body {
     padding: 20px;
     background: #fafafa;
     margin-bottom: 20px;
+    transition: all 0.5s ease;
+    position: relative;
+}
+
+/* 顧客反応に応じたチャット背景エフェクト */
+.chat-messages.reaction-positive {
+    background: linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%);
+    border-color: #86efac;
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.15);
+}
+
+.chat-messages.reaction-negative {
+    background: linear-gradient(135deg, #fff5f5 0%, #fee2e2 100%);
+    border-color: #fca5a5;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.15);
+}
+
+.chat-messages.reaction-very-positive {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border-color: #34d399;
+    box-shadow: 0 0 30px rgba(16, 185, 129, 0.25);
+    animation: positiveGlow 1s ease-out;
+}
+
+.chat-messages.reaction-very-negative {
+    background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+    border-color: #f87171;
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.25);
+    animation: negativeGlow 1s ease-out;
+}
+
+@keyframes positiveGlow {
+    0% { box-shadow: 0 0 0 rgba(16, 185, 129, 0); }
+    50% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.4); }
+    100% { box-shadow: 0 0 30px rgba(16, 185, 129, 0.25); }
+}
+
+@keyframes negativeGlow {
+    0% { box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+    50% { box-shadow: 0 0 40px rgba(239, 68, 68, 0.4); }
+    100% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.25); }
+}
+
+/* 反応インジケーターオーバーレイ */
+.reaction-indicator {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.85em;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    animation: indicatorSlideIn 0.3s ease-out;
+    z-index: 10;
+}
+
+@keyframes indicatorSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.reaction-indicator.positive {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+}
+
+.reaction-indicator.negative {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+}
+
+.reaction-indicator.neutral {
+    background: linear-gradient(135deg, #94a3b8, #64748b);
+    color: white;
 }
 
 .message {
@@ -696,6 +1082,65 @@ body {
     background: #e0e0e0;
     color: #333;
     margin-right: auto;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+/* 顧客メッセージの反応別スタイル */
+.message.customer.reaction-positive {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    border-left: 4px solid #22c55e;
+}
+
+.message.customer.reaction-negative {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border-left: 4px solid #ef4444;
+}
+
+.message.customer.reaction-very-positive {
+    background: linear-gradient(135deg, #a7f3d0 0%, #6ee7b7 100%);
+    border-left: 4px solid #10b981;
+    animation: messagePositivePulse 0.5s ease-out;
+}
+
+.message.customer.reaction-very-negative {
+    background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%);
+    border-left: 4px solid #dc2626;
+    animation: messageNegativePulse 0.5s ease-out;
+}
+
+@keyframes messagePositivePulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); box-shadow: 0 4px 20px rgba(34, 197, 94, 0.3); }
+    100% { transform: scale(1); }
+}
+
+@keyframes messageNegativePulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); box-shadow: 0 4px 20px rgba(239, 68, 68, 0.3); }
+    100% { transform: scale(1); }
+}
+
+/* メッセージ内の反応バッジ */
+.message-reaction-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75em;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.message-reaction-badge.positive {
+    background: rgba(34, 197, 94, 0.2);
+    color: #16a34a;
+}
+
+.message-reaction-badge.negative {
+    background: rgba(239, 68, 68, 0.2);
+    color: #dc2626;
 }
 
 .message-header {
@@ -2319,4 +2764,604 @@ body {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
+}
+
+/* ===== チャットウェルカムメッセージ ===== */
+.chat-welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    text-align: center;
+    padding: 40px 20px;
+    color: #666;
+}
+
+.chat-welcome .welcome-icon {
+    font-size: 4em;
+    margin-bottom: 20px;
+    opacity: 0.8;
+}
+
+.chat-welcome h3 {
+    color: #333;
+    font-size: 1.4em;
+    margin-bottom: 20px;
+    font-weight: 600;
+}
+
+.chat-welcome .welcome-hint {
+    color: #888;
+    font-size: 0.95em;
+    margin-top: 15px;
+}
+
+.session-info-card {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border: 1px solid #dee2e6;
+    border-radius: 12px;
+    padding: 20px 30px;
+    margin: 15px 0;
+    min-width: 280px;
+    max-width: 400px;
+}
+
+.session-info-card .info-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0;
+    font-size: 0.95em;
+}
+
+.session-info-card .info-item .info-label {
+    color: #666;
+    min-width: 80px;
+    text-align: right;
+}
+
+.session-info-card .info-item .info-value {
+    color: #333;
+    font-weight: 500;
+}
+
+/* ===== コーチングヒントパネル ===== */
+.coaching-hint-panel {
+    background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%);
+    border: 2px solid #ffc107;
+    border-radius: 10px;
+    padding: 12px 15px;
+    margin-bottom: 15px;
+    transition: all 0.3s ease;
+}
+
+.coaching-hint-panel.hidden {
+    opacity: 0.6;
+    border-color: #ddd;
+    background: #f8f9fa;
+}
+
+.coaching-hint-panel.hint-updated {
+    animation: hintPanelPulse 1s ease-out;
+}
+
+@keyframes hintPanelPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7);
+        transform: scale(1);
+    }
+    30% {
+        box-shadow: 0 0 20px 5px rgba(255, 193, 7, 0.4);
+        transform: scale(1.02);
+    }
+    100% {
+        box-shadow: none;
+        transform: scale(1);
+    }
+}
+
+.coaching-hint-panel.hidden .coaching-hint-content {
+    display: none;
+}
+
+.coaching-hint-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.coaching-hint-panel.hidden .coaching-hint-header {
+    margin-bottom: 0;
+}
+
+.coaching-hint-title {
+    font-weight: 600;
+    color: #856404;
+    font-size: 0.95em;
+}
+
+.coaching-hint-panel.hidden .coaching-hint-title {
+    color: #888;
+}
+
+/* トグルスイッチ */
+.coaching-toggle {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    cursor: pointer;
+}
+
+.coaching-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    border-radius: 24px;
+    transition: 0.3s;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    border-radius: 50%;
+    transition: 0.3s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.coaching-toggle input:checked + .toggle-slider {
+    background-color: #ffc107;
+}
+
+.coaching-toggle input:checked + .toggle-slider:before {
+    transform: translateX(20px);
+}
+
+/* コーチングヒントコンテンツ */
+.coaching-hint-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.coaching-hint-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 0.9em;
+    line-height: 1.5;
+    animation: hintSlideIn 0.3s ease-out;
+}
+
+@keyframes hintSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.coaching-hint-item .hint-icon {
+    font-size: 1.2em;
+    flex-shrink: 0;
+}
+
+.coaching-hint-item .hint-text {
+    color: #333;
+}
+
+/* ヒントタイプ別スタイル */
+.coaching-hint-item.hint-info {
+    background: rgba(255, 255, 255, 0.7);
+    border-left: 3px solid #17a2b8;
+}
+
+.coaching-hint-item.hint-success {
+    background: rgba(40, 167, 69, 0.1);
+    border-left: 3px solid #28a745;
+}
+
+.coaching-hint-item.hint-success .hint-text {
+    color: #155724;
+}
+
+.coaching-hint-item.hint-warning {
+    background: rgba(255, 193, 7, 0.15);
+    border-left: 3px solid #ffc107;
+}
+
+.coaching-hint-item.hint-warning .hint-text {
+    color: #856404;
+}
+
+.coaching-hint-item.hint-danger {
+    background: rgba(220, 53, 69, 0.1);
+    border-left: 3px solid #dc3545;
+}
+
+.coaching-hint-item.hint-danger .hint-text {
+    color: #721c24;
+}
+
+.coaching-hint-item.hint-tip {
+    background: rgba(102, 126, 234, 0.1);
+    border-left: 3px solid #667eea;
+}
+
+.coaching-hint-item.hint-tip .hint-text {
+    color: #3d4f8c;
+}
+
+/* ヒントのパルスアニメーション（重要な場合） */
+.coaching-hint-item.hint-pulse {
+    animation: hintPulse 2s ease-in-out infinite;
+}
+
+@keyframes hintPulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(255, 193, 7, 0);
+    }
+}
+
+/* ===== 成功率メーターのパルスエフェクト ===== */
+.success-meter.meter-positive-pulse {
+    animation: meterPositivePulse 1.5s ease-out;
+}
+
+.success-meter.meter-negative-pulse {
+    animation: meterNegativePulse 1.5s ease-out;
+}
+
+@keyframes meterPositivePulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+    }
+    25% {
+        box-shadow: 0 0 20px 10px rgba(40, 167, 69, 0.4);
+        border-color: #28a745;
+    }
+    100% {
+        box-shadow: 0 4px 6px rgba(19, 33, 49, 0.3);
+        border-color: #132131;
+    }
+}
+
+@keyframes meterNegativePulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+    }
+    25% {
+        box-shadow: 0 0 20px 10px rgba(220, 53, 69, 0.4);
+        border-color: #dc3545;
+    }
+    100% {
+        box-shadow: 0 4px 6px rgba(19, 33, 49, 0.3);
+        border-color: #132131;
+    }
+}
+
+/* 成功率の数値が更新されるときのハイライト */
+.success-probability-value.updating {
+    transform: scale(1.15);
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+}
+
+/* 成功率の変動表示を強調 */
+.success-delta-display {
+    animation: deltaFadeIn 0.3s ease-out;
+}
+
+@keyframes deltaFadeIn {
+    0% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.success-delta-value.positive {
+    color: #28a745 !important;
+    font-weight: bold;
+    text-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
+}
+
+.success-delta-value.negative {
+    color: #dc3545 !important;
+    font-weight: bold;
+    text-shadow: 0 0 10px rgba(220, 53, 69, 0.5);
+}
+
+/* 履歴バーのアニメーション */
+.history-bar-item {
+    transition: height 0.3s ease-out, background-color 0.3s ease-out;
+}
+
+.history-bar-item:last-child {
+    animation: barGrow 0.4s ease-out;
+}
+
+@keyframes barGrow {
+    0% {
+        transform: scaleY(0);
+        opacity: 0;
+    }
+    100% {
+        transform: scaleY(1);
+        opacity: 1;
+    }
+}
+
+/* トレンドインジケーターのアニメーション */
+.success-trend-indicator {
+    transition: all 0.3s ease-out;
+}
+
+.trend-arrow {
+    font-size: 1.3em;
+    font-weight: bold;
+    transition: transform 0.3s ease-out;
+}
+
+.trend-arrow.up {
+    color: #28a745;
+    animation: arrowBounceUp 0.5s ease-out;
+}
+
+.trend-arrow.down {
+    color: #dc3545;
+    animation: arrowBounceDown 0.5s ease-out;
+}
+
+@keyframes arrowBounceUp {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}
+
+@keyframes arrowBounceDown {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(5px); }
+}
+
+/* ===== チャットステータスバー（常時表示） ===== */
+.chat-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    color: white;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    flex-wrap: wrap;
+}
+
+.status-score {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.status-label {
+    font-size: 0.75em;
+    opacity: 0.8;
+    margin-right: 4px;
+}
+
+.status-score-value {
+    font-size: 1.8em;
+    font-weight: bold;
+    color: #fff;
+    transition: all 0.3s ease;
+    min-width: 40px;
+    text-align: center;
+}
+
+.status-score-value.updating {
+    color: #ffd700;
+    transform: scale(1.1);
+    text-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+}
+
+.status-score-unit {
+    font-size: 1em;
+    opacity: 0.9;
+}
+
+.status-delta {
+    font-size: 0.9em;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 6px;
+    animation: statusDeltaPop 0.4s ease-out;
+}
+
+.status-delta.positive {
+    background: rgba(40, 167, 69, 0.3);
+    color: #4ade80;
+    border: 1px solid rgba(40, 167, 69, 0.5);
+}
+
+.status-delta.negative {
+    background: rgba(220, 53, 69, 0.3);
+    color: #f87171;
+    border: 1px solid rgba(220, 53, 69, 0.5);
+}
+
+@keyframes statusDeltaPop {
+    0% { transform: scale(0); opacity: 0; }
+    50% { transform: scale(1.3); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.status-trend {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    font-size: 0.85em;
+}
+
+.status-trend-arrow {
+    font-size: 1.1em;
+    font-weight: bold;
+}
+
+.status-trend-arrow.up {
+    color: #4ade80;
+}
+
+.status-trend-arrow.down {
+    color: #f87171;
+}
+
+.status-trend-arrow.stable {
+    color: #94a3b8;
+}
+
+.status-trend-text {
+    font-size: 0.8em;
+    opacity: 0.9;
+}
+
+.status-stage {
+    display: flex;
+    align-items: center;
+}
+
+.status-stage-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 0.9em;
+    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
+}
+
+.status-history {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 20px;
+    flex-grow: 1;
+    min-width: 80px;
+    max-width: 150px;
+}
+
+.status-history .history-bar-item {
+    flex: 1;
+    min-width: 3px;
+    max-width: 8px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 2px;
+    transition: all 0.3s ease;
+}
+
+.status-history .history-bar-item.positive {
+    background: linear-gradient(to top, #22c55e, #4ade80);
+}
+
+.status-history .history-bar-item.negative {
+    background: linear-gradient(to top, #ef4444, #f87171);
+}
+
+.status-history .history-bar-item.neutral {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+/* ステータスバーのパルスエフェクト */
+.chat-status-bar.pulse-positive {
+    animation: statusBarPositivePulse 1.5s ease-out;
+}
+
+.chat-status-bar.pulse-negative {
+    animation: statusBarNegativePulse 1.5s ease-out;
+}
+
+@keyframes statusBarPositivePulse {
+    0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+    30% { box-shadow: 0 0 20px 5px rgba(40, 167, 69, 0.4); }
+    100% { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2); }
+}
+
+@keyframes statusBarNegativePulse {
+    0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+    30% { box-shadow: 0 0 20px 5px rgba(220, 53, 69, 0.4); }
+    100% { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2); }
+}
+
+/* ===== コーチングヒントパネル（折りたたみ版） ===== */
+.coaching-hint-panel.collapsed {
+    padding: 8px 12px;
+}
+
+.coaching-hint-panel.collapsed .coaching-hint-content {
+    display: none;
+}
+
+.coaching-hint-panel.collapsed .coaching-hint-header {
+    margin-bottom: 0;
+    cursor: pointer;
+}
+
+.coaching-hint-preview {
+    flex-grow: 1;
+    font-size: 0.85em;
+    color: #666;
+    margin: 0 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.coaching-expand-btn {
+    background: none;
+    border: none;
+    color: #856404;
+    cursor: pointer;
+    font-size: 0.8em;
+    padding: 2px 6px;
+    transition: transform 0.3s ease;
+}
+
+.coaching-hint-panel:not(.collapsed) .coaching-expand-btn {
+    transform: rotate(180deg);
+}
+
+.coaching-hint-panel:not(.collapsed) .coaching-hint-preview {
+    display: none;
 }

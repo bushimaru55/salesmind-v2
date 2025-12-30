@@ -223,36 +223,55 @@
                     <!-- 企業概要がここに表示される（詳細診断モード用） -->
                     <div id="companySummary" class="company-summary" style="display: none;"></div>
                     
-                    <!-- 商談成功率パネル（詳細診断モード用） -->
-                    <div id="successMeter" class="success-meter" style="display: none;">
-                        <div class="success-meter-header">
-                            <h3>📊 商談成功率</h3>
-                        </div>
-                        <div class="success-meter-content">
-                            <div class="success-probability-display">
+                    <!-- 商談成功率パネル（コンパクト版・詳細診断モード用） -->
+                    <div id="successMeter" class="success-meter-compact" style="display: none;">
+                        <div class="success-meter-main">
+                            <div class="success-meter-score">
+                                <span class="success-label">📊 成功率</span>
                                 <span class="success-probability-value" id="successProbabilityValue">50</span>
                                 <span class="success-probability-unit">%</span>
+                                <span class="success-delta-badge" id="successDeltaDisplay" style="display: none;">
+                                    <span id="successDeltaValue">+0</span>
+                                </span>
                             </div>
-                            <div class="success-delta-display" id="successDeltaDisplay" style="display: none;">
-                                <span class="success-delta-value" id="successDeltaValue">+0</span>
-                                <span class="success-delta-unit">%</span>
+                            <div class="success-trend-compact" id="successTrendIndicator">
+                                <span class="trend-arrow" id="trendArrow">→</span>
+                                <span class="trend-description" id="trendDescription">安定</span>
                             </div>
-                            <div class="success-reason-display" id="successReasonDisplay" style="display: none;">
-                                <p class="success-reason-text" id="successReasonText"></p>
+                            <div class="success-history-bar-compact" id="successHistoryBar">
+                                <!-- JSで動的に追加 -->
                             </div>
-                            <div class="success-spin-meta" id="successSpinMeta" style="display: none;">
-                                <p class="success-spin-item" id="successSpinStage"></p>
-                                <p class="success-spin-item" id="successSpinMessage"></p>
-                                <p class="success-spin-item" id="successSpinAppropriateness"></p>
-                                <p class="success-spin-item" id="successSpinEvaluation"></p>
-                                <p class="success-spin-item" id="successSpinSessionStage"></p>
+                        </div>
+                        <div class="success-meter-details" id="successMeterDetails">
+                            <div class="success-spin-info">
+                                <span class="spin-stage-badge" id="successSpinStage">S（状況確認）</span>
+                                <span class="spin-message-badge" id="successSpinMessage"></span>
                             </div>
-                            <div class="success-system-notes" id="successSystemNotes" style="display: none;"></div>
+                            <div class="success-reason-compact" id="successReasonDisplay" style="display: none;">
+                                <span id="successReasonText"></span>
+                            </div>
+                        </div>
+                        <!-- 非表示要素（互換性のため） -->
+                        <div style="display:none;">
+                            <span id="successSpinAppropriateness"></span>
+                            <span id="successSpinEvaluation"></span>
+                            <span id="successSpinSessionStage"></span>
+                            <span id="successSpinMeta"></span>
+                            <span id="successSystemNotes"></span>
                         </div>
                     </div>
                     
                     <div id="closingPhaseIndicator" class="closing-phase-indicator" style="display: none;"></div>
                     <div id="chatMessages" class="chat-messages">
+                        <!-- ウェルカムメッセージ（チャット開始時に表示） -->
+                        <div id="chatWelcome" class="chat-welcome">
+                            <div class="welcome-icon">💬</div>
+                            <h3>商談トレーニングを開始しましょう</h3>
+                            <div class="session-info-card" id="sessionInfoCard">
+                                <!-- セッション情報がJS側で動的に挿入される -->
+                            </div>
+                            <p class="welcome-hint">下の入力欄からメッセージを送信してください</p>
+                        </div>
                         <!-- メッセージがここに表示される -->
                     </div>
                     
@@ -272,6 +291,41 @@
                         </div>
                         <div class="temperature-chart-container">
                             <canvas id="temperatureChart" width="400" height="100"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- コーチングヒントパネル（折りたたみ可能） -->
+                    <div id="coachingHintPanel" class="coaching-hint-panel collapsed">
+                        <div class="coaching-hint-header" onclick="toggleCoachingPanelExpand()">
+                            <span class="coaching-hint-title">💡 ヒント</span>
+                            <span id="coachingHintPreview" class="coaching-hint-preview">会話を開始してください</span>
+                            <button class="coaching-expand-btn" id="coachingExpandBtn">▼</button>
+                        </div>
+                        <div id="coachingHintContent" class="coaching-hint-content">
+                            <div class="coaching-hint-item hint-info">
+                                <span class="hint-icon">📝</span>
+                                <span class="hint-text">会話を開始すると、顧客の反応に応じたアドバイスが表示されます</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- ステータスバー（常時表示・チャット入力の上） -->
+                    <div id="chatStatusBar" class="chat-status-bar" style="display: none;">
+                        <div class="status-score">
+                            <span class="status-label">成功率</span>
+                            <span class="status-score-value" id="statusScoreValue">50</span>
+                            <span class="status-score-unit">%</span>
+                            <span class="status-delta" id="statusDelta"></span>
+                        </div>
+                        <div class="status-trend" id="statusTrend">
+                            <span class="status-trend-arrow" id="statusTrendArrow">→</span>
+                            <span class="status-trend-text" id="statusTrendText">安定</span>
+                        </div>
+                        <div class="status-stage">
+                            <span class="status-stage-badge" id="statusStageBadge">S</span>
+                        </div>
+                        <div class="status-history" id="statusHistory">
+                            <!-- 履歴バーがここに動的に追加 -->
                         </div>
                     </div>
                     

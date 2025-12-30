@@ -1193,6 +1193,11 @@ def chat_session_stream(request):
                     if system_notes:
                         done_data['system_notes'] = system_notes
                     done_data['session_spin_stage'] = session.current_spin_stage
+                    
+                    logger.info(
+                        "[Streaming] 成功率情報送信: Session %s, probability=%s, delta=%s, stage=%s, message_type=%s",
+                        session.id, success_probability, success_delta, current_spin_stage, message_spin_type
+                    )
                 
                 # 失注確定の場合
                 if loss_response:

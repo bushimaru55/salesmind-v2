@@ -213,12 +213,19 @@ async function startRealtimeConversation() {
             }
         };
         
-        realtimeClient.onResponse = (response) => {
+        realtimeClient.onResponse = async (response) => {
             if (window.logger) {
                 window.logger.info('AI応答完了', response);
             }
             // AI応答が完了したら、次の応答は新しいメッセージとして作成
             currentAIMessageId = null;
+            
+            // リアルタイムモードでもスコアを更新
+            try {
+                await updateRealtimeScore(response);
+            } catch (error) {
+                console.error('[Realtime] スコア更新エラー:', error);
+            }
         };
         
         realtimeClient.onError = (error) => {
@@ -532,5 +539,81 @@ if (originalFinishSession) {
         cleanupRealtimeSession();
         return originalFinishSession.apply(this, arguments);
     };
+}
+
+/**
+ * リアルタイムモードでのスコア更新
+ * AI顧客の応答完了時に呼び出される
+ */
+let lastRealtimeScore = 50;  // 前回のスコアを保持
+
+async function updateRealtimeScore(response) {
+    if (!currentSessionId) {
+        console.log('[Realtime Score] セッションIDがありません');
+        return;
+    }
+    
+    try {
+        // 最新のセッション情報を取得
+        const apiResponse = await fetch(`/api/session/${currentSessionId}/`, {
+            headers: {
+                'Authorization': `Token ${authToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!apiResponse.ok) {
+            console.error('[Realtime Score] セッション情報取得エラー:', apiResponse.status);
+            return;
+        }
+        
+        const sessionData = await apiResponse.json();
+        const currentScore = sessionData.success_probability || 50;
+        const delta = currentScore - lastRealtimeScore;
+        const spinStage = sessionData.current_spin_stage || 'S';
+        
+        console.log('[Realtime Score] スコア情報:', {
+            currentScore,
+            lastRealtimeScore,
+            delta,
+            spinStage
+        });
+        
+        // スコアを更新
+        if (typeof updateSuccessProbability === 'function') {
+            updateSuccessProbability(currentScore, delta, null, {
+                currentStage: spinStage,
+                sessionStage: spinStage
+            });
+        }
+        
+        // 最新の顧客メッセージからコーチングヒントを生成
+        if (response && response.output && response.output.length > 0) {
+            const lastOutput = response.output[response.output.length - 1];
+            if (lastOutput.content && lastOutput.content.length > 0) {
+                const transcript = lastOutput.content.find(c => c.type === 'audio' && c.transcript);
+                if (transcript && typeof generateCoachingHint === 'function') {
+                    generateCoachingHint(
+                        transcript.transcript,
+                        currentScore,
+                        delta,
+                        spinStage
+                    );
+                }
+            }
+        }
+        
+        lastRealtimeScore = currentScore;
+        
+    } catch (error) {
+        console.error('[Realtime Score] エラー:', error);
+    }
+}
+
+/**
+ * リアルタイムセッション開始時にスコアをリセット
+ */
+function resetRealtimeScore() {
+    lastRealtimeScore = 50;
 }
 
