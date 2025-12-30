@@ -4,10 +4,11 @@
  * リアルタイム音声会話を管理します
  */
 class RealtimeClient {
-    constructor(authToken, sessionId = null, sessionInfo = null) {
+    constructor(authToken, sessionId = null, sessionInfo = null, voice = 'alloy') {
         this.authToken = authToken;
         this.sessionId = sessionId;
         this.sessionInfo = sessionInfo;  // セッション情報（企業情報、ペルソナ等）
+        this.voice = voice;  // 音声設定（alloy, echo, fable, onyx, nova, shimmer）
         this.ws = null;
         this.isConnected = false;
         this.audioContext = null;
@@ -25,6 +26,12 @@ class RealtimeClient {
         this.onAudio = null;
         this.onError = null;
         this.onStatusChange = null;
+        this.onUserSpeechStopped = null;  // ユーザー発言停止時のコールバック
+        
+        // メッセージ順序管理
+        this.pendingUserItemId = null;  // 文字起こし待ちのユーザーメッセージID
+        
+        console.log(`🎤 RealtimeClient初期化: voice=${this.voice}`);
     }
     
     /**
@@ -252,24 +259,69 @@ class RealtimeClient {
      * セッション情報から顧客ペルソナのinstructionsを生成
      */
     _buildCustomerInstructions() {
-        let instructions = `【重要：あなたの役割は「顧客」です】
+        let instructions = `【重要：日本語で会話してください】
 
-あなたは営業ロールプレイの「顧客」役を演じます。
-相手（ユーザー）が「営業担当者」で、あなたに商品やサービスを提案してきます。
+あなたは日本の企業で働くビジネスパーソンです。
+必ず日本語で会話してください。韓国語、英語、その他の言語は使用禁止です。
 
-=== 絶対に守るべきルール ===
-1. あなたは「顧客」です。「営業担当者」ではありません。
-2. 商品やサービスを売り込む側ではなく、提案を受ける側です。
-3. 自分から商品の説明や営業トークをしてはいけません。
-4. 営業担当者の話を聞いて、質問したり、興味を示したり、懸念を表明してください。
-5. 日本語で自然に会話してください。
+【あなたは「リアルな顧客」です】
 
-=== あなたの振る舞い ===
-- 営業担当者の提案に対して「なるほど」「それはどういうことですか？」などと反応する
-- 価格や導入コストについて質問する
-- 自社の課題やニーズについて話す
-- 競合製品との比較を尋ねる
-- 導入の障壁や懸念点を述べる
+あなたは営業ロールプレイで「顧客」役を演じます。
+相手（ユーザー）が「営業担当者」で、あなたに商品を売り込んできます。
+あなたは忙しいビジネスパーソンで、貴重な時間を割いて話を聞いています。
+
+=== 会話のルール（重要） ===
+- 相手の発言を最後まで聞いてから返答する
+- 相手が話している途中で割り込まない
+- 相手の発言が完了するまで待つ
+- 短い返答でも問題ない（「はい」「なるほど」など）
+
+=== あなたの基本姿勢 ===
+- 商品について何も知らない（営業から教えてもらう立場）
+- 忙しいので要点を簡潔に説明してほしい
+- 本当に役立つなら検討するが、簡単には決めない
+- 予算、上司の承認、導入時期など現実的な制約がある
+
+=== リアルな顧客としての反応 ===
+
+【失礼・不真面目な対応を受けた場合】
+- 「ちょっと、真面目にやってもらえますか？」
+- 「失礼ですね。お時間いただいてるんですが」
+- 「ふざけてるんですか？」
+- 「これ以上話しても無駄そうですね」と打ち切る
+- 冷たい態度で短く返答する
+
+【曖昧・わかりにくい説明を受けた場合】
+- 「すみません、よくわかりません」
+- 「結局何がメリットなんですか？」
+- 「もっと具体的に説明してください」
+
+【興味がない・必要性を感じない場合】
+- 「うちには必要ないかな」
+- 「今は他に優先すべきことがあるので」
+- 「検討しますが、正直あまり興味ないです」
+
+【価格・コストについて】
+- 「それ、いくらするんですか？」
+- 「高いですね。費用対効果はどうですか？」
+- 「予算が限られているので難しいかもしれません」
+
+【導入への懸念】
+- 「上に相談しないと決められません」
+- 「他社でも似たようなのありますよね？」
+- 「導入にどのくらい時間かかりますか？」
+
+=== 絶対にやらないこと ===
+- 商品の説明をする（あなたは知らない）
+- 「何かご質問は？」など営業的な質問をする
+- 「ご説明しましょうか」と提案する
+- 過度に親切・協力的になる
+
+=== 応答の基本 ===
+- 挨拶 → 短く返す「よろしくお願いします」
+- 説明を聞いたら → 「なるほど」「へえ」「それで？」
+- 質問されたら → 自社の状況を正直に答える
+- わからなければ → 「それはどういうことですか？」
 `;
         
         // セッション情報がある場合、詳細なペルソナを追加
@@ -291,7 +343,16 @@ class RealtimeClient {
             }
         }
         
-        instructions += `\n繰り返しますが、あなたは「顧客」です。営業担当者の話を聞いて、顧客として自然に反応してください。`;
+        instructions += `
+
+=== 最終確認 ===
+- 必ず日本語で会話する（韓国語・英語は禁止）
+- あなたは忙しいビジネスパーソン
+- 商品知識はゼロ（営業から聞く立場）
+- 失礼な対応には厳しく対応する
+- 納得できなければ断る
+- 営業的な質問（「何かご質問は？」など）は絶対にしない
+- 商品の説明は絶対にしない（あなたは知らない）`;
         
         console.log('📝 生成されたinstructions:', instructions);
         return instructions;
@@ -314,14 +375,18 @@ class RealtimeClient {
                 model: 'gpt-realtime',
                 modalities: ['audio', 'text'],
                 instructions: instructions,
-                voice: 'alloy',
+                voice: this.voice,
                 input_audio_format: 'pcm16',
                 input_audio_transcription: {
                     model: 'gpt-4o-mini-transcribe',
                     language: 'ja'
                 },
                 turn_detection: {
-                    type: 'server_vad'
+                    type: 'server_vad',
+                    // 発言終了の検出感度を調整
+                    threshold: 0.6,              // 音声検出の感度（0.0-1.0、高いほど感度低下）
+                    prefix_padding_ms: 400,      // 発言開始前のパディング（ミリ秒）
+                    silence_duration_ms: 800     // 発言終了と判定する無音時間（ミリ秒、長めに設定）
                 },
                 output_audio_format: 'pcm16'
             }
@@ -382,17 +447,28 @@ class RealtimeClient {
                         console.log('🎤 音声送信準備完了');
                         break;
                     
-                    case 'conversation.item.input_audio_transcription.completed':
-                        // ユーザーの発言の文字起こし
-                        if (this.onTranscript && data.transcript) {
-                            this.onTranscript(data.transcript, 'user');
+                    case 'input_audio_buffer.speech_stopped':
+                        // ユーザーの発言が停止 - プレースホルダーを作成
+                        console.log('🎙️ ユーザー発言停止:', data.item_id);
+                        this.pendingUserItemId = data.item_id;
+                        if (this.onUserSpeechStopped) {
+                            this.onUserSpeechStopped(data.item_id);
                         }
+                        break;
+                    
+                    case 'conversation.item.input_audio_transcription.completed':
+                        // ユーザーの発言の文字起こし完了
+                        console.log('📝 ユーザー文字起こし完了:', data.item_id);
+                        if (this.onTranscript && data.transcript) {
+                            this.onTranscript(data.transcript, 'user', data.item_id);
+                        }
+                        this.pendingUserItemId = null;
                         break;
                     
                     case 'response.audio_transcript.delta':
                         // AIの応答の文字起こし（リアルタイム）
                         if (this.onTranscript && data.delta) {
-                            this.onTranscript(data.delta, 'assistant');
+                            this.onTranscript(data.delta, 'assistant', null);
                         }
                         break;
                     

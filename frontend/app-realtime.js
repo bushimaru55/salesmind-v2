@@ -128,81 +128,127 @@ async function startRealtimeConversation() {
             console.log('📋 セッション情報（フォールバック）:', sessionInfo);
         }
         
-        // RealtimeClientを初期化
-        if (!realtimeClient) {
-            realtimeClient = new RealtimeClient(authToken, currentSessionId, sessionInfo);
-            
-            // イベントハンドラーを設定
-            realtimeClient.onConnected = () => {
-                if (window.logger) {
-                    window.logger.info('Realtime API接続成功');
-                }
-                updateRealtimeStatus('connected');
-                
-                // 音声ストリーミング開始
-                realtimeClient.startAudioStream().catch(error => {
-                    console.error('音声ストリーミング開始失敗:', error);
-                    alert('マイクへのアクセスを許可してください');
-                    stopRealtimeConversation();
-                });
-            };
-            
-            realtimeClient.onDisconnected = (code, reason) => {
-                if (window.logger) {
-                    window.logger.info('Realtime API切断', { code, reason });
-                }
-                updateRealtimeStatus('disconnected');
-                isRealtimeTalking = false;
-                updateRealtimeButton(false, '会話を開始');
-            };
-            
-            realtimeClient.onTranscript = (text, role) => {
-                // 文字起こしをチャットに表示
-                if (role === 'user') {
-                    addChatMessage('salesperson', text);
-                } else if (role === 'assistant') {
-                    // AIの応答を追加または更新
-                    updateOrAddAIMessage(text);
-                }
-            };
-            
-            realtimeClient.onResponse = (response) => {
-                if (window.logger) {
-                    window.logger.info('AI応答完了', response);
-                }
-                // AI応答が完了したら、次の応答は新しいメッセージとして作成
-                currentAIMessageId = null;
-            };
-            
-            realtimeClient.onError = (error) => {
-                console.error('Realtime API エラー:', error);
-                if (window.logger) {
-                    window.logger.error('Realtime API エラー', { error });
-                }
-                updateRealtimeStatus('error');
-                
-                // エラーメッセージを詳細に表示
-                let errorMsg = 'エラーが発生しました';
-                if (typeof error === 'string') {
-                    errorMsg = error;
-                } else if (error && error.message) {
-                    errorMsg = error.message;
-                }
-                
-                alert(`リアルタイム会話エラー: ${errorMsg}\n\nログを確認してください。`);
-                stopRealtimeConversation();
-            };
-            
-            realtimeClient.onStatusChange = (status) => {
-                updateRealtimeStatus(status);
-            };
-            
-            // 音声再生ハンドラー（音声出力が有効な場合のみ）
-            if (enableAudioOutput) {
-                realtimeClient.onAudio = (base64Audio) => {
-                    playAudioChunk(base64Audio);
-                };
+        // RealtimeClientを初期化（毎回新しく作成して最新の音声設定を使用）
+        // TTS API: alloy, echo, fable, onyx, nova, shimmer
+        // Realtime API: alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar
+        
+        // 音声の取得：localStorageから（setVoice関数で保存される）
+        let ttsVoice = localStorage.getItem('ttsVoice') || 'alloy';
+        console.log('🎤 localStorage ttsVoice =', ttsVoice);
+        
+        // 'auto'の場合はペルソナから判定、または alloy をデフォルトに
+        if (ttsVoice === 'auto') {
+            // ペルソナから音声を判定
+            const persona = sessionInfo?.customer_persona || '';
+            if (persona.includes('女性') || persona.includes('女')) {
+                ttsVoice = 'nova';
+            } else if (persona.includes('男性') || persona.includes('男') || persona.includes('社長') || persona.includes('部長')) {
+                ttsVoice = 'onyx';
+            } else {
+                ttsVoice = 'alloy';
             }
+            console.log('🎤 自動判定: ペルソナ =', persona.substring(0, 20), '→ 音声 =', ttsVoice);
+        }
+        
+        // TTS音声をRealtime API音声にマッピング
+        const voiceMapping = {
+            'alloy': 'alloy',      // 中性的 → 中性的
+            'echo': 'echo',        // 男性・落ち着き → 男性・落ち着き
+            'fable': 'verse',      // 男性・物語調 → verse
+            'onyx': 'ash',         // 男性・権威的 → ash
+            'nova': 'coral',       // 女性・明るい → coral
+            'shimmer': 'shimmer',  // 女性・柔らかい → shimmer
+            'auto': 'alloy'        // 自動 → デフォルト
+        };
+        const customerVoice = voiceMapping[ttsVoice] || 'alloy';
+        console.log('🎤 最終音声:', ttsVoice, '→', customerVoice);
+        
+        // 既存のクライアントがあれば破棄
+        if (realtimeClient) {
+            realtimeClient.stopAudioStream();
+            realtimeClient.disconnect();
+            realtimeClient = null;
+        }
+        
+        realtimeClient = new RealtimeClient(authToken, currentSessionId, sessionInfo, customerVoice);
+        
+        // イベントハンドラーを設定
+        realtimeClient.onConnected = () => {
+            if (window.logger) {
+                window.logger.info('Realtime API接続成功');
+            }
+            updateRealtimeStatus('connected');
+            
+            // 音声ストリーミング開始
+            realtimeClient.startAudioStream().catch(error => {
+                console.error('音声ストリーミング開始失敗:', error);
+                alert('マイクへのアクセスを許可してください');
+                stopRealtimeConversation();
+            });
+        };
+        
+        realtimeClient.onDisconnected = (code, reason) => {
+            if (window.logger) {
+                window.logger.info('Realtime API切断', { code, reason });
+            }
+            updateRealtimeStatus('disconnected');
+            isRealtimeTalking = false;
+            updateRealtimeButton(false, '会話を開始');
+        };
+        
+        // ユーザー発言停止時にプレースホルダーを作成
+        realtimeClient.onUserSpeechStopped = (itemId) => {
+            console.log('🎙️ ユーザー発言停止 - プレースホルダー作成:', itemId);
+            createUserMessagePlaceholder(itemId);
+        };
+        
+        realtimeClient.onTranscript = (text, role, itemId) => {
+            // 文字起こしをチャットに表示
+            if (role === 'user') {
+                // プレースホルダーを更新
+                updateUserMessagePlaceholder(itemId, text);
+            } else if (role === 'assistant') {
+                // AIの応答を追加または更新
+                updateOrAddAIMessage(text);
+            }
+        };
+        
+        realtimeClient.onResponse = (response) => {
+            if (window.logger) {
+                window.logger.info('AI応答完了', response);
+            }
+            // AI応答が完了したら、次の応答は新しいメッセージとして作成
+            currentAIMessageId = null;
+        };
+        
+        realtimeClient.onError = (error) => {
+            console.error('Realtime API エラー:', error);
+            if (window.logger) {
+                window.logger.error('Realtime API エラー', { error });
+            }
+            updateRealtimeStatus('error');
+            
+            // エラーメッセージを詳細に表示
+            let errorMsg = 'エラーが発生しました';
+            if (typeof error === 'string') {
+                errorMsg = error;
+            } else if (error && error.message) {
+                errorMsg = error.message;
+            }
+            
+            alert(`リアルタイム会話エラー: ${errorMsg}\n\nログを確認してください。`);
+            stopRealtimeConversation();
+        };
+        
+        realtimeClient.onStatusChange = (status) => {
+            updateRealtimeStatus(status);
+        };
+        
+        // 音声再生ハンドラー（音声出力が有効な場合のみ）
+        if (enableAudioOutput) {
+            realtimeClient.onAudio = (base64Audio) => {
+                playAudioChunk(base64Audio);
+            };
         }
         
         // 接続
@@ -410,6 +456,62 @@ function updateOrAddAIMessage(text) {
     `;
     
     chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+/**
+ * ユーザーメッセージのプレースホルダーを作成
+ */
+function createUserMessagePlaceholder(itemId) {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+    
+    // 既にプレースホルダーが存在する場合はスキップ
+    if (document.getElementById(`user-message-${itemId}`)) {
+        console.log('⏭️ プレースホルダー既存:', itemId);
+        return;
+    }
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message salesperson pending';
+    messageDiv.id = `user-message-${itemId}`;
+    messageDiv.innerHTML = `
+        <div class="message-header">
+            <span class="message-role">営業担当者</span>
+            <span class="message-time">${new Date().toLocaleTimeString('ja-JP')}</span>
+        </div>
+        <div class="message-content"><span class="typing-indicator">...</span></div>
+    `;
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    console.log('✅ プレースホルダー作成:', itemId);
+}
+
+/**
+ * ユーザーメッセージのプレースホルダーを更新
+ */
+function updateUserMessagePlaceholder(itemId, text) {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+    
+    // プレースホルダーを探す
+    const placeholder = document.getElementById(`user-message-${itemId}`);
+    
+    if (placeholder) {
+        // プレースホルダーを更新
+        const contentDiv = placeholder.querySelector('.message-content');
+        if (contentDiv) {
+            contentDiv.textContent = text;
+            placeholder.classList.remove('pending');
+            console.log('✅ プレースホルダー更新:', itemId, text.substring(0, 30));
+        }
+    } else {
+        // プレースホルダーがない場合は新規作成（フォールバック）
+        console.log('⚠️ プレースホルダーなし、新規作成:', itemId);
+        addChatMessage('salesperson', text);
+    }
+    
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 

@@ -674,6 +674,24 @@ body {
     text-align: right;
 }
 
+.message.salesperson.pending {
+    opacity: 0.7;
+}
+
+.message.salesperson.pending .message-content {
+    font-style: italic;
+}
+
+.typing-indicator {
+    display: inline-block;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+}
+
 .message.customer {
     background: #e0e0e0;
     color: #333;
